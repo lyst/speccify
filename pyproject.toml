@@ -8,6 +8,7 @@ authors = ["Lyst Ltd. <devs@lyst.com>"]
 python = "^3.9"
 djangorestframework = "*"
 drf-yasg = "*"
+djangorestframework-dataclasses = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

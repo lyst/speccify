@@ -109,6 +109,18 @@ python-versions = ">=3.5"
 django = ">=2.2"
 
 [[package]]
+name = "djangorestframework-dataclasses"
+version = "0.9"
+description = "A dataclasses serializer for Django REST Framework"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+django = ">=2.0"
+djangorestframework = ">=3.9"
+
+[[package]]
 name = "drf-yasg"
 version = "1.20.0"
 description = "Automated generation of real Swagger/OpenAPI 2.0 schemas from Django Rest Framework code."
@@ -346,7 +358,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "9b4312636691be634af5866ad2f663a96a7ece79f303c13adc9c24fbc0d7cdc7"
+content-hash = "78f3627c90ebc581c4eeefc633b9041400bd78704ffe1e0d8d618ee17becf3aa"
 
 [metadata.files]
 asgiref = [
@@ -388,6 +400,10 @@ django = [
 djangorestframework = [
     {file = "djangorestframework-3.12.4-py3-none-any.whl", hash = "sha256:6d1d59f623a5ad0509fe0d6bfe93cbdfe17b8116ebc8eda86d45f6e16e819aaf"},
     {file = "djangorestframework-3.12.4.tar.gz", hash = "sha256:f747949a8ddac876e879190df194b925c177cdeb725a099db1460872f7c0a7f2"},
+]
+djangorestframework-dataclasses = [
+    {file = "djangorestframework-dataclasses-0.9.tar.gz", hash = "sha256:ad04e820ee3ce1ac44e38347a24f53c62b642f2a08d910e61c289d9d1a7a8b69"},
+    {file = "djangorestframework_dataclasses-0.9-py3-none-any.whl", hash = "sha256:2b05e08d3e9c52268d50a1b82ccafa52baac6b7df8ba08ce82b32e661c5a9434"},
 ]
 drf-yasg = [
     {file = "drf-yasg-1.20.0.tar.gz", hash = "sha256:d50f197c7f02545d0b736df88c6d5cf874f8fea2507ad85ad7de6ae5bf2d9e5a"},
