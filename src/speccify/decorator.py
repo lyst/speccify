@@ -25,6 +25,20 @@ class Empty:
     pass
 
 
+class AbsorbedView:
+    """This view has been absorbed into another using `view.dispatch`
+
+    The absorbed view should not be attached to an url, or ever called. To call it, call the
+    parent view using a request with a matching method for this view.
+    """
+
+    def __init__(self, parent_view_name):
+        self.parent_view_name = parent_view_name
+
+    def __repr__(self):
+        return f"<AbsorbedView (parent={self.parent_view_name})>"
+
+
 class CustomDataclassSerializer(DataclassSerializer):
     def build_dataclass_field(self, field_name: str, type_info):
         """
@@ -131,6 +145,7 @@ def foo_api(
     default_response_code=status.HTTP_200_OK,
 ):
     def decorator_wrapper(view_func):
+        main_view_name = view_func.__name__
         view_descriptor = ViewDescriptor.from_view(view_func)
 
         method_map = {}
@@ -200,9 +215,7 @@ def foo_api(
 
                 # this view should not be attached to an url, or ever called. to call it, call the
                 # "parent" view using a request with a matching method for this view
-                # TODO: can we return something that gives an even better error messaes if
-                # called/mounted?
-                return None
+                return AbsorbedView(main_view_name)
 
             return decorator_wrapper
 
