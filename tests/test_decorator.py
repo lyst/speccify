@@ -197,7 +197,7 @@ def test_stacking(rf):
     def view_get(request: Request, my_data: MyQueryData) -> MyResponse:
         return MyResponse(r="get")
 
-    @view_get.dispatch(methods=["POST"], permissions=[])
+    @view_get.add(methods=["POST"])
     def view_post(request: Request, my_data: MyRequestData) -> MyResponse:
         return MyResponse(r="post")
 

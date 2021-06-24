@@ -26,7 +26,7 @@ class Empty:
 
 
 class AbsorbedView:
-    """This view has been absorbed into another using `view.dispatch`
+    """This view has been absorbed into another using `view.add`
 
     The absorbed view should not be attached to an url, or ever called. To call it, call the
     parent view using a request with a matching method for this view.
@@ -184,7 +184,7 @@ def foo_api(
             return Response(status=200, data=asdict(response_serializer.validated_data))
 
         # TODO: can we share this with foo_api better?
-        def dispatch(
+        def add(
             *,
             methods,
             default_response_code=status.HTTP_200_OK,
@@ -212,7 +212,7 @@ def foo_api(
 
         # TODO: name
         # dispatch, add, add_view, mount, ..?
-        wrapper.dispatch = dispatch
+        wrapper.add = add
         return wrapper
 
     return decorator_wrapper
