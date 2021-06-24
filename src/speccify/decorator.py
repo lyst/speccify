@@ -84,7 +84,12 @@ def _make_serializer(data_class):
                 f"Error collecting `{data_class}`. Name already in use by `{name_used_by}`"
             )
         registered_class_names[data_class.__name__] = data_class
-        for field in dataclasses.fields(data_class):
+        try:
+            fields = dataclasses.fields(data_class)
+        except TypeError as exc:
+            raise TypeError(f"`{data_class}` must be a dataclass") from exc
+
+        for field in fields:
             if _is_optional(field.type) and (
                 field.default is dataclasses.MISSING
                 and field.default_factory is dataclasses.MISSING
