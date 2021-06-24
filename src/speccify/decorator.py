@@ -1,5 +1,5 @@
 import functools
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
@@ -14,7 +14,12 @@ class QueryParams:
     pass
 
 
-class PostData:
+class RequestData:
+    pass
+
+
+@dataclass
+class Empty:
     pass
 
 
@@ -34,42 +39,121 @@ class CustomDataclassSerializer(DataclassSerializer):
         return field_class, field_kwargs
 
 
-def foo_api(*, data_class, methods, responses, permissions):
-    class RequestDataMeta:
-        dataclass = data_class
-
-    serializer_name = f"{data_class.__name__}Serializer"
-    serializer_cls = type(
-        serializer_name, (CustomDataclassSerializer,), {"Meta": RequestDataMeta}
-    )
-
-    response_cls = responses.get(status.HTTP_200_OK)
-
-    class ResponseMeta:
-        dataclass = response_cls
-
-    response_serializer_name = f"{response_cls.__name__}Serializer"
-    response_serializer_cls = type(
-        response_serializer_name, (CustomDataclassSerializer,), {"Meta": ResponseMeta}
-    )
-
+def foo_api(
+    *,
+    methods,
+    permissions,
+    default_response_code=status.HTTP_200_OK,
+):
     def decorator_wrapper(view_func):
+
+        import inspect
+
+        signature = inspect.signature(view_func)
+        query_param_entries = {}
+        request_data_entries = {}
+        for param in signature.parameters.values():
+            annotation = param.annotation
+            if isinstance(annotation, type) and issubclass(annotation, QueryParams):
+                query_param_entries[param.name] = annotation
+            if isinstance(annotation, type) and issubclass(annotation, RequestData):
+                request_data_entries[param.name] = annotation
+
+        if len(query_param_entries) == 1:
+            (query_data_key,) = query_param_entries.keys()
+            (query_data_class,) = query_param_entries.values()
+
+            class QueryDataMeta:
+                dataclass = query_data_class
+
+            query_serializer_name = f"{query_data_class.__name__}Serializer"
+            query_serializer_cls = type(
+                query_serializer_name,
+                (CustomDataclassSerializer,),
+                {"Meta": QueryDataMeta},
+            )
+
+        elif len(query_param_entries) == 0:
+            query_data_key = None
+
+        else:
+            # len > 1
+            raise TypeError("At most one `QueryParams` parameter is allowed")
+
+        if len(request_data_entries) == 1:
+            (request_data_key,) = request_data_entries.keys()
+            (request_data_class,) = request_data_entries.values()
+
+            class RequestDataMeta:
+                dataclass = request_data_class
+
+            request_serializer_name = f"{request_data_class.__name__}Serializer"
+            request_serializer_cls = type(
+                request_serializer_name,
+                (CustomDataclassSerializer,),
+                {"Meta": RequestDataMeta},
+            )
+
+        elif len(request_data_entries) == 0:
+            request_data_key = None
+
+        else:
+            # len > 1
+            raise TypeError("At most one `RequestData` parameter is allowed")
+
+        response_cls = signature.return_annotation
+        if response_cls is signature.empty:
+            raise TypeError("Response type annotation is required")
+        if response_cls is None:
+            response_cls = Empty
+
+        class ResponseMeta:
+            dataclass = response_cls
+
+        response_serializer_name = f"{response_cls.__name__}Serializer"
+        response_serializer_cls = type(
+            response_serializer_name,
+            (CustomDataclassSerializer,),
+            {"Meta": ResponseMeta},
+        )
+
+        swagger_auto_schema_kwargs = {}
+        if query_data_key is not None:
+            swagger_auto_schema_kwargs["query_serializer"] = query_serializer_cls
+        if request_data_key is not None:
+            swagger_auto_schema_kwargs["request_body"] = request_serializer_cls
+
         @functools.wraps(view_func)
         @swagger_auto_schema(
-            query_serializer=serializer_cls,
             methods=methods,
-            responses={status.HTTP_200_OK: response_serializer_cls},
+            responses={default_response_code: response_serializer_cls},
+            **swagger_auto_schema_kwargs,
         )
         @api_view(methods)
         @permission_classes(permissions)
         def wrapper(request, **kwargs):
-            data = request.query_params
-            serializer = serializer_cls(data=data)
-            serializer.is_valid(raise_exception=True)
+            view_kwargs = {}
+            if query_data_key is not None:
+                query_serializer = query_serializer_cls(data=request.query_params)
+                query_serializer.is_valid(raise_exception=True)
 
-            data_instance = serializer.validated_data
+                query_data_instance = query_serializer.validated_data
+                view_kwargs[query_data_key] = query_data_instance
 
-            response_data = view_func(request, data_instance)
+            if request_data_key is not None:
+                request_serializer = request_serializer_cls(data=request.data)
+                request_serializer.is_valid(raise_exception=True)
+
+                request_data_instance = request_serializer.validated_data
+                view_kwargs[request_data_key] = request_data_instance
+
+            response_data = view_func(request, **view_kwargs)
+
+            if response_cls is Empty:
+                assert (
+                    response_data is None
+                ), "Type signature says response is None, but view returned data"
+                response_data = Empty()
 
             response_serializer = response_serializer_cls(data=asdict(response_data))
             response_serializer.is_valid(raise_exception=True)
