@@ -12,6 +12,7 @@ drf-spectacular = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
+pytest-cov = "*"
 pytest-django = "*"
 
 [build-system]
