@@ -57,40 +57,20 @@ def foo_api(
     default_response_code=status.HTTP_200_OK,
 ):
     def decorator_wrapper(view_func):
+        injected_params = {}
+        seen_types = set()
 
         signature = inspect.signature(view_func)
-        query_param_entries = {}
-        request_data_entries = {}
         for param in signature.parameters.values():
             annotation = param.annotation
-            if isinstance(annotation, type) and issubclass(annotation, QueryParams):
-                query_param_entries[param.name] = annotation
-            if isinstance(annotation, type) and issubclass(annotation, RequestData):
-                request_data_entries[param.name] = annotation
-
-        if len(query_param_entries) == 1:
-            (query_data_key,) = query_param_entries.keys()
-            (query_data_class,) = query_param_entries.values()
-            query_serializer_cls = _make_serializer(query_data_class)
-
-        elif len(query_param_entries) == 0:
-            query_data_key = None
-
-        else:
-            # len > 1
-            raise TypeError("At most one `QueryParams` parameter is allowed")
-
-        if len(request_data_entries) == 1:
-            (request_data_key,) = request_data_entries.keys()
-            (request_data_class,) = request_data_entries.values()
-            request_serializer_cls = _make_serializer(request_data_class)
-
-        elif len(request_data_entries) == 0:
-            request_data_key = None
-
-        else:
-            # len > 1
-            raise TypeError("At most one `RequestData` parameter is allowed")
+            for injection_type in (QueryParams, RequestData):
+                if isinstance(annotation, type) and issubclass(annotation, injection_type):
+                    if injection_type in seen_types:
+                        raise TypeError(
+                            f"At most one `{injection_type.__name__}` parameter is allowed"
+                        )
+                    injected_params[param.name] = _make_serializer(annotation)
+                    seen_types.add(injection_type)
 
         response_cls = signature.return_annotation
         if response_cls is signature.empty:
@@ -101,10 +81,11 @@ def foo_api(
         response_serializer_cls = _make_serializer(response_cls)
 
         swagger_auto_schema_kwargs = {}
-        if query_data_key is not None:
-            swagger_auto_schema_kwargs["query_serializer"] = query_serializer_cls
-        if request_data_key is not None:
-            swagger_auto_schema_kwargs["request_body"] = request_serializer_cls
+        for key, serializer_cls in injected_params.items():
+            if issubclass(serializer_cls.Meta.dataclass, QueryParams):
+                swagger_auto_schema_kwargs["query_serializer"] = serializer_cls
+            if issubclass(serializer_cls.Meta.dataclass, RequestData):
+                swagger_auto_schema_kwargs["request_body"] = serializer_cls
 
         @functools.wraps(view_func)
         @swagger_auto_schema(
@@ -116,19 +97,15 @@ def foo_api(
         @permission_classes(permissions)
         def wrapper(request, **kwargs):
             view_kwargs = {}
-            if query_data_key is not None:
-                query_serializer = query_serializer_cls(data=request.query_params)
-                query_serializer.is_valid(raise_exception=True)
+            for key, serializer_cls in injected_params.items():
+                if issubclass(serializer_cls.Meta.dataclass, QueryParams):
+                    serializer = serializer_cls(data=request.query_params)
+                if issubclass(serializer_cls.Meta.dataclass, RequestData):
+                    serializer = serializer_cls(data=request.data)
 
-                query_data_instance = query_serializer.validated_data
-                view_kwargs[query_data_key] = query_data_instance
-
-            if request_data_key is not None:
-                request_serializer = request_serializer_cls(data=request.data)
-                request_serializer.is_valid(raise_exception=True)
-
-                request_data_instance = request_serializer.validated_data
-                view_kwargs[request_data_key] = request_data_instance
+                serializer.is_valid(raise_exception=True)
+                data_instance = serializer.validated_data
+                view_kwargs[key] = data_instance
 
             response_data = view_func(request, **view_kwargs)
 
