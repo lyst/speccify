@@ -121,6 +121,18 @@ def test_query_params(rf):
     assert response.data == {"r": "5"}
 
 
+def test_extra_query_params(rf):
+    @foo_api(methods=["GET"], permissions=[])
+    def view(request: Request, my_query: MyQueryData) -> MyResponse:
+        foo = my_query.q
+        bar = len(foo)
+        return MyResponse(r=bar)
+
+    request = rf.get("/?q=value&r=foo")
+    response = view(request)
+    assert response.data == {"r": "5"}
+
+
 def test_post_data(rf):
     @foo_api(
         methods=["POST"],
