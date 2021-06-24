@@ -251,7 +251,7 @@ def api_view(
                 request.method in method_map
             ), "drf_api_view.methods should ensure this"
             view_descriptor = method_map[request.method]
-            view_kwargs = {}
+            view_kwargs = kwargs
             for key, (
                 marker,
                 serializer_cls,

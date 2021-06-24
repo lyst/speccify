@@ -1,4 +1,5 @@
 import json
+import sys
 import types
 from dataclasses import dataclass
 from typing import Annotated, Optional
@@ -337,3 +338,22 @@ def test_missing_return_annotation(rf):
             pass  # pragma: no cover
 
     assert "Response type annotation is required" in str(exc_info.value)
+
+
+def test_url_path_params(settings, client):
+    @api_view(methods=["GET"], permissions=[])
+    def view(request: Request, param: str) -> None:
+        pass
+
+    urlpatterns = [
+        path("<slug:param>/", view, name="view"),
+    ]
+
+    urls_module = types.ModuleType("test_urls_module")
+    urls_module.urlpatterns = urlpatterns
+
+    sys.modules["test_urls_module"] = urls_module
+
+    settings.ROOT_URLCONF = "test_urls_module"
+    response = client.get("/value/")
+    assert response.status_code == 200
