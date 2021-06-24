@@ -104,7 +104,7 @@ def test_query_params(rf):
     def view(request: Request, my_query: QueryParams[MyQueryData]) -> MyResponse:
         foo = my_query.q
         bar = len(foo)
-        return MyResponse(r=bar)
+        return MyResponse(r=str(bar))
 
     request = rf.get("/?q=value")
     response = view(request)
@@ -173,7 +173,7 @@ def test_post_data(rf):
     def view(request: Request, my_data: RequestData[MyRequestData]) -> MyResponse:
         foo = my_data.d
         bar = len(foo)
-        return MyResponse(r=bar)
+        return MyResponse(r=str(bar))
 
     request = rf.post("/", {"d": "value"})
     response = view(request)
