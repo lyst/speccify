@@ -192,7 +192,6 @@ def foo_api(
         def dispatch(
             *,
             methods,
-            permissions,
             default_response_code=status.HTTP_200_OK,
         ):
             def decorator_wrapper(view_func):
@@ -209,9 +208,6 @@ def foo_api(
                     )
                 )
                 swagger_decorator(wrapper)
-
-                # TODO:
-                #  permission_classes(permissions)(view)?
 
                 # this view should not be attached to an url, or ever called. to call it, call the
                 # "parent" view using a request with a matching method for this view
