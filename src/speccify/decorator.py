@@ -83,7 +83,6 @@ def _make_serializer(data_class):
             raise TypeError(
                 f"Error collecting `{data_class}`. Name already in use by `{name_used_by}`"
             )
-        registered_class_names[data_class.__name__] = data_class
         try:
             fields = dataclasses.fields(data_class)
         except TypeError as exc:
@@ -107,6 +106,7 @@ def _make_serializer(data_class):
             (CustomDataclassSerializer,),
             {"Meta": Meta, "__doc__": data_class.__doc__},
         )
+        registered_class_names[data_class.__name__] = data_class
 
     return serializer_registry[data_class]
 
