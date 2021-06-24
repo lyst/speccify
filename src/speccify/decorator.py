@@ -309,6 +309,7 @@ def api_view(
             return decorator_wrapper
 
         wrapper.add = add
+        wrapper._speccify_api = True
         return wrapper
 
     return decorator_wrapper
