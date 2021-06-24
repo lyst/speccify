@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
 
 serializer_registry = {}
+registered_class_names = {}
 
 NoneType = type(None)
 _T = TypeVar("_T")
@@ -77,6 +78,12 @@ def _is_optional(field_type):
 
 def _make_serializer(data_class):
     if data_class not in serializer_registry:
+        name_used_by = registered_class_names.get(data_class.__name__)
+        if name_used_by:
+            raise TypeError(
+                f"Error collecting `{data_class}`. Name already in use by `{name_used_by}`"
+            )
+        registered_class_names[data_class.__name__] = data_class
         for field in dataclasses.fields(data_class):
             if _is_optional(field.type) and (
                 field.default is dataclasses.MISSING

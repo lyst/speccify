@@ -10,7 +10,24 @@ from django.urls import path
 from drf_spectacular.views import SpectacularAPIView
 from rest_framework.request import Request
 
-from speccify.decorator import QueryParams, RequestData, api_view
+from speccify.decorator import (
+    QueryParams,
+    RequestData,
+    api_view,
+    registered_class_names,
+    serializer_registry,
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_serializer_registry():
+    registry_before = serializer_registry.copy()
+    names_before = registered_class_names.copy()
+    yield
+    serializer_registry.clear()
+    serializer_registry.update(registry_before)
+    registered_class_names.clear()
+    registered_class_names.update(names_before)
 
 
 @dataclass
