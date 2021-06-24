@@ -1,7 +1,7 @@
-import inspect
 import functools
+import inspect
 from dataclasses import asdict, dataclass
-from typing import Any, List
+from typing import Any, Dict
 
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
@@ -42,21 +42,44 @@ class CustomDataclassSerializer(DataclassSerializer):
 
 
 def _make_serializer(data_class):
-    class Meta:
-        dataclass = data_class
+    if data_class not in serializer_registry:
 
-    serializer_name = f"{data_class.__name__}Serializer"
-    serializer_cls = type(serializer_name, (CustomDataclassSerializer,), {"Meta": Meta})
-    return serializer_cls
+        class Meta:
+            dataclass = data_class
+
+        serializer_name = f"{data_class.__name__}Serializer"
+        serializer_registry[data_class] = type(
+            serializer_name, (CustomDataclassSerializer,), {"Meta": Meta}
+        )
+
+    return serializer_registry[data_class]
 
 
-def foo_api(
-    *,
-    methods,
-    permissions,
-    default_response_code=status.HTTP_200_OK,
-):
-    def decorator_wrapper(view_func):
+def add_more_methods(view_func, methods):
+    # small hack to attach more http methods to a view already decorated with drf.api_view
+
+    # assumes something else has checked that these methods are not already set
+    existing_methods = view_func.cls.http_method_names
+    # TODO: re-check for overlap?
+
+    # we just need access to the handler, which is the same for all methods except `options` (which
+    # is added by drf with a custom handler)
+    existing_method = next(method for method in existing_methods if method != "options")
+    handler = getattr(view_func.cls, existing_method)
+    methods = [method.lower() for method in methods]
+    for method in methods:
+        setattr(view_func.cls, method, handler)
+    view_func.cls.http_method_names.extend(methods)
+
+
+@dataclass
+class ViewDescriptor:
+    view_func: Any  # callable?
+    injected_params: Dict[str, DataclassSerializer]
+    response_serializer_cls: DataclassSerializer
+
+    @classmethod
+    def from_view(cls, view_func):
         injected_params = {}
         seen_types = set()
 
@@ -64,7 +87,9 @@ def foo_api(
         for param in signature.parameters.values():
             annotation = param.annotation
             for injection_type in (QueryParams, RequestData):
-                if isinstance(annotation, type) and issubclass(annotation, injection_type):
+                if isinstance(annotation, type) and issubclass(
+                    annotation, injection_type
+                ):
                     if injection_type in seen_types:
                         raise TypeError(
                             f"At most one `{injection_type.__name__}` parameter is allowed"
@@ -80,24 +105,50 @@ def foo_api(
 
         response_serializer_cls = _make_serializer(response_cls)
 
-        swagger_auto_schema_kwargs = {}
-        for key, serializer_cls in injected_params.items():
+        return cls(
+            view_func=view_func,
+            injected_params=injected_params,
+            response_serializer_cls=response_serializer_cls,
+        )
+
+    def swagger_auto_schema_kwargs(self, methods, default_response_code):
+        kwargs = {}
+        for key, serializer_cls in self.injected_params.items():
             if issubclass(serializer_cls.Meta.dataclass, QueryParams):
-                swagger_auto_schema_kwargs["query_serializer"] = serializer_cls
+                kwargs["query_serializer"] = serializer_cls
             if issubclass(serializer_cls.Meta.dataclass, RequestData):
-                swagger_auto_schema_kwargs["request_body"] = serializer_cls
+                kwargs["request_body"] = serializer_cls
+
+        kwargs["methods"] = methods
+        kwargs["responses"] = {default_response_code: self.response_serializer_cls}
+        return kwargs
+
+
+def foo_api(
+    *,
+    methods,
+    permissions,
+    default_response_code=status.HTTP_200_OK,
+):
+    def decorator_wrapper(view_func):
+        view_descriptor = ViewDescriptor.from_view(view_func)
+
+        method_map = {}
+        for method in methods:
+            assert method not in method_map, "overlapping methods are not allowed"
+            method_map[method] = view_descriptor
 
         @functools.wraps(view_func)
         @swagger_auto_schema(
-            methods=methods,
-            responses={default_response_code: response_serializer_cls},
-            **swagger_auto_schema_kwargs,
+            **view_descriptor.swagger_auto_schema_kwargs(methods, default_response_code)
         )
         @api_view(methods)
         @permission_classes(permissions)
         def wrapper(request, **kwargs):
+            assert request.method in method_map, "api_view.methods should ensure this"
+            view_descriptor = method_map[request.method]
             view_kwargs = {}
-            for key, serializer_cls in injected_params.items():
+            for key, serializer_cls in view_descriptor.injected_params.items():
                 if issubclass(serializer_cls.Meta.dataclass, QueryParams):
                     serializer = serializer_cls(data=request.query_params)
                 if issubclass(serializer_cls.Meta.dataclass, RequestData):
@@ -107,66 +158,57 @@ def foo_api(
                 data_instance = serializer.validated_data
                 view_kwargs[key] = data_instance
 
-            response_data = view_func(request, **view_kwargs)
+            response_data = view_descriptor.view_func(request, **view_kwargs)
 
-            if response_cls is Empty:
+            if view_descriptor.response_serializer_cls.Meta.dataclass is Empty:
                 assert (
                     response_data is None
                 ), "Type signature says response is None, but view returned data"
                 response_data = Empty()
 
-            response_serializer = response_serializer_cls(data=asdict(response_data))
+            response_serializer = view_descriptor.response_serializer_cls(
+                data=asdict(response_data)
+            )
             response_serializer.is_valid(raise_exception=True)
 
             return Response(status=200, data=asdict(response_serializer.validated_data))
 
+        # TODO: can we share this with foo_api better?
+        def dispatch(
+            *,
+            methods,
+            permissions,
+            default_response_code=status.HTTP_200_OK,
+        ):
+            def decorator_wrapper(view_func):
+                view_descriptor = ViewDescriptor.from_view(view_func)
+                for method in methods:
+                    assert (
+                        method not in method_map
+                    ), "overlapping methods are not allowed"
+                    method_map[method] = view_descriptor
+                add_more_methods(wrapper, methods)
+                swagger_decorator = swagger_auto_schema(
+                    **view_descriptor.swagger_auto_schema_kwargs(
+                        methods, default_response_code
+                    )
+                )
+                swagger_decorator(wrapper)
+
+                # TODO:
+                #  permission_classes(permissions)(view)?
+
+                # this view should not be attached to an url, or ever called. to call it, call the
+                # "parent" view using a request with a matching method for this view
+                # TODO: can we return something that gives an even better error messaes if
+                # called/mounted?
+                return None
+
+            return decorator_wrapper
+
+        # TODO: name
+        # dispatch, add, add_view, mount, ..?
+        wrapper.dispatch = dispatch
         return wrapper
 
     return decorator_wrapper
-
-
-@dataclass
-class Dispatch:
-    methods: List[str]
-    permissions: List[Any]
-    view: Any
-
-
-def foo_api_dispatch(entries):
-    # TODO:
-    # this approach means the view doesn't get included in the generated openapi schema
-    # i _think_ that's because the function that we decorate with @swagger_auto_schema is
-    # _different from the view that we mount at the url (with `path('..'. view)`)
-    # see sketch of new approach in dispatch_v2 below
-    method_map = {}
-    for entry in entries:
-        decorator = foo_api(methods=entry.methods, permissions=entry.permissions)
-        decorated = decorator(entry.view)
-        for method in entry.methods:
-            assert method not in method_map, "Can't have overlapping entries"
-            method_map[method] = decorated
-
-    def dispatch_view(request, *a, **k):
-        assert request.method in method_map, "api_view.methods should ensure this"
-
-        view = method_map[request.method]
-        return view(request, *a, **k)
-
-    return dispatch_view
-
-
-# def foo_api_dispatch_v2(entries):
-
-#     def dispatch_view(request, *a, **k):
-#         ...
-
-#     for entry in entries:
-#         @swagger_auto_schema(data)(dispatch_view)
-
-#     return dispatch_view
-
-
-# def foo_api_v2(*args):
-#     def wrapper(view):
-#         return foo_api_dispatch_v2([Dispatch(*args, view=view)]
-#     )

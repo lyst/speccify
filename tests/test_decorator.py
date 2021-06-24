@@ -10,13 +10,7 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework.request import Request
 
-from speccify.decorator import (
-    Dispatch,
-    QueryParams,
-    RequestData,
-    foo_api,
-    foo_api_dispatch,
-)
+from speccify.decorator import QueryParams, RequestData, foo_api
 
 
 @dataclass
@@ -100,47 +94,46 @@ def test_schema(rf):
     assert "Child1" in schema["definitions"]
 
 
+@dataclass
+class MyQueryData(QueryParams):
+    q: str
+
+
+@dataclass
+class MyRequestData(RequestData):
+    d: str
+
+
+@dataclass
+class MyResponse:
+    r: str
+
+
 def test_query_params(rf):
-    @dataclass
-    class MyQueryData(QueryParams):
-        foo: str
-
-    @dataclass
-    class MyResponse:
-        bar: int
-
     @foo_api(methods=["GET"], permissions=[])
     def view(request: Request, my_query: MyQueryData) -> MyResponse:
-        foo = my_query.foo
+        foo = my_query.q
         bar = len(foo)
-        return MyResponse(bar=bar)
+        return MyResponse(r=bar)
 
-    request = rf.get("/?foo=value")
+    request = rf.get("/?q=value")
     response = view(request)
-    assert response.data == {"bar": 5}
+    assert response.data == {"r": "5"}
 
 
 def test_post_data(rf):
-    @dataclass
-    class MyPostData(RequestData):
-        foo: str
-
-    @dataclass
-    class MyResponse:
-        bar: int
-
     @foo_api(
         methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, my_data: MyPostData) -> MyResponse:
-        foo = my_data.foo
+    def view(request: Request, my_data: MyRequestData) -> MyResponse:
+        foo = my_data.d
         bar = len(foo)
-        return MyResponse(bar=bar)
+        return MyResponse(r=bar)
 
-    request = rf.post("/", {"foo": "value"})
+    request = rf.post("/", {"d": "value"})
     response = view(request)
-    assert response.data == {"bar": 5}
+    assert response.data == {"r": "5"}
 
 
 def test_urlencoded_request_data(rf):
@@ -196,27 +189,41 @@ def test_stacking(rf):
     class MyResponse:
         r: str
 
+    @foo_api(methods=["GET"], permissions=[])
+    def view_single(request: Request, my_data: MyQueryData) -> MyResponse:
+        pass
+
+    @foo_api(methods=["GET"], permissions=[])
     def view_get(request: Request, my_data: MyQueryData) -> MyResponse:
         return MyResponse(r="get")
 
+    @view_get.dispatch(methods=["POST"], permissions=[])
     def view_post(request: Request, my_data: MyRequestData) -> MyResponse:
         return MyResponse(r="post")
 
-    view = foo_api_dispatch(
-        entries=[
-            Dispatch(methods=["GET"], view=view_get, permissions=[]),
-            Dispatch(methods=["POST"], view=view_post, permissions=[]),
-        ]
-    )
-
     get_request = rf.get("/?q=value")
-    get_response = view(get_request)
-    assert get_response.data["r"] == "get"
+    get_response = view_get(get_request)
+    get_response.render()
+    assert get_response.data == {"r": "get"}
 
     post_request = rf.post("/", data={"d": "value"})
-    post_response = view(post_request)
-    assert post_response.data["r"] == "post"
+    post_response = view_get(post_request)
+    assert post_response.data == {"r": "post"}
 
-    urlpatterns = [path("foo", view)]
+    with pytest.raises(TypeError):
+        # should not be possible to mount this one
+        path("bad", view_post)
+
+    urlpatterns = [
+        path("single", view_single),
+        path("multiple", view_get),
+    ]
     schema = _get_schema(urlpatterns)
-    assert schema
+
+    paths = schema["paths"]
+    assert "/single" in paths
+    assert "get" in paths["/single"]
+
+    assert "/multiple" in paths
+    assert "get" in paths["/multiple"]
+    assert "post" in paths["/multiple"]
