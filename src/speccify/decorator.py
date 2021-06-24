@@ -98,7 +98,9 @@ def _make_serializer(data_class):
 
         serializer_name = f"{data_class.__name__}Serializer"
         serializer_registry[data_class] = type(
-            serializer_name, (CustomDataclassSerializer,), {"Meta": Meta}
+            serializer_name,
+            (CustomDataclassSerializer,),
+            {"Meta": Meta, "__doc__": data_class.__doc__},
         )
 
     return serializer_registry[data_class]
