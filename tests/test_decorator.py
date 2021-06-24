@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 import pytest
+from django.test.client import RequestFactory
 from django.urls import path
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
@@ -20,6 +21,31 @@ class Person(QueryParams):
 @dataclass
 class Display:
     length: str
+
+
+def _get_schema(urlpatterns):
+    rf = RequestFactory()
+
+    urlconf = types.ModuleType("urlconf")
+    urlconf.urlpatterns = urlpatterns
+
+    schema_view = get_schema_view(
+        openapi.Info(
+            title="",
+            default_version="v1",
+        ),
+        public=True,
+        urlconf=urlconf,
+    )
+
+    schema_request = rf.get("schema")
+    schema_response = schema_view.without_ui(cache_timeout=0)(
+        request=schema_request, format=".json"
+    )
+
+    schema_response.render()
+    schema = json.loads(schema_response.content.decode())
+    return schema
 
 
 def test_basic(rf):
@@ -60,25 +86,7 @@ def test_schema(rf):
     urlpatterns = [
         path("view", view),
     ]
-    urlconf = types.ModuleType("urlconf")
-    urlconf.urlpatterns = urlpatterns
-
-    schema_view = get_schema_view(
-        openapi.Info(
-            title="",
-            default_version="v1",
-        ),
-        public=True,
-        urlconf=urlconf,
-    )
-
-    schema_request = rf.get("schema")
-    schema_response = schema_view.without_ui(cache_timeout=0)(
-        request=schema_request, format=".json"
-    )
-
-    schema_response.render()
-    schema = json.loads(schema_response.content.decode())
+    schema = _get_schema(urlpatterns)
     paths = schema["paths"]
     assert "/view" in paths
     assert "get" in paths["/view"]
