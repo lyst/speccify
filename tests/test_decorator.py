@@ -1,6 +1,7 @@
 import json
 import types
 from dataclasses import dataclass
+from typing import Optional
 from urllib.parse import urlencode
 
 import pytest
@@ -100,6 +101,11 @@ class MyQueryData(QueryParams):
 
 
 @dataclass
+class MyDefaultQueryData(QueryParams):
+    q: Optional[str] = "foo"
+
+
+@dataclass
 class MyRequestData(RequestData):
     d: str
 
@@ -107,6 +113,11 @@ class MyRequestData(RequestData):
 @dataclass
 class MyResponse:
     r: str
+
+
+@dataclass
+class MyDefaultResponse:
+    r: Optional[str] = None
 
 
 def test_query_params(rf):
@@ -123,14 +134,48 @@ def test_query_params(rf):
 
 def test_extra_query_params(rf):
     @foo_api(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: MyQueryData) -> MyResponse:
-        foo = my_query.q
-        bar = len(foo)
-        return MyResponse(r=bar)
+    def view(request: Request, my_query: MyQueryData) -> None:
+        assert not hasattr(my_query, "r")
+        return
 
     request = rf.get("/?q=value&r=foo")
     response = view(request)
-    assert response.data == {"r": "5"}
+    assert response.status_code == 200
+
+
+def test_default_query_params(rf):
+    @foo_api(methods=["GET"], permissions=[])
+    def view(request: Request, my_query: MyDefaultQueryData) -> None:
+        return
+
+    request = rf.get("/")
+    response = view(request)
+    assert response.status_code == 200
+
+
+def test_default_response_key(rf):
+    @foo_api(methods=["GET"], permissions=[])
+    def view(request: Request) -> MyDefaultResponse:
+        return MyDefaultResponse()
+
+    request = rf.get("/")
+    response = view(request)
+    assert response.data == {"r": None}
+
+
+def test_raise_type_error_if_optional_not_provided():
+    @dataclass
+    class OptionalWithoutDefault(QueryParams):
+        q: Optional[str]
+
+    def view(request: Request, my_query: OptionalWithoutDefault) -> None:
+        return None
+
+    with pytest.raises(TypeError) as exc_info:
+        foo_api(methods=["GET"], permissions=[])(view)
+
+    assert "Optional fields must provide a default" in str(exc_info.value)
+    assert "OptionalWithoutDefault'>.q`." in str(exc_info.value)
 
 
 def test_post_data(rf):

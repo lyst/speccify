@@ -1,8 +1,10 @@
+import dataclasses
 import functools
 import inspect
 import re
-from dataclasses import asdict, dataclass
-from typing import Any, Dict
+import typing
+from dataclasses import dataclass
+from typing import Any, Dict, Union
 
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
@@ -51,8 +53,23 @@ class CustomDataclassSerializer(DataclassSerializer):
         return field_class, field_kwargs
 
 
+def _is_optional(field_type):
+    # https://stackoverflow.com/questions/56832881/check-if-a-field-is-typing-optional
+    return typing.get_origin(field_type) is Union and type(None) in typing.get_args(
+        field_type
+    )
+
+
 def _make_serializer(data_class):
     if data_class not in serializer_registry:
+        for field in dataclasses.fields(data_class):
+            if _is_optional(field.type) and (
+                field.default is dataclasses.MISSING
+                and field.default_factory is dataclasses.MISSING
+            ):
+                raise TypeError(
+                    f"Error collecting `{data_class}.{field.name}`. Optional fields must provide a default"
+                )
 
         class Meta:
             dataclass = data_class
@@ -192,11 +209,13 @@ def foo_api(
                 response_data = Empty()
 
             response_serializer = view_descriptor.response_serializer_cls(
-                data=asdict(response_data)
+                data=dataclasses.asdict(response_data)
             )
             response_serializer.is_valid(raise_exception=True)
 
-            return Response(status=200, data=asdict(response_serializer.validated_data))
+            return Response(
+                status=200, data=dataclasses.asdict(response_serializer.validated_data)
+            )
 
         # TODO: can we share this with foo_api better?
         def add(
