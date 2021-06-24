@@ -86,4 +86,4 @@ def test_schema(rf):
     assert "/view" in paths
     assert "get" in paths["/view"]
 
-    assert "DCS__Child1" in schema["definitions"]
+    assert "Child1" in schema["definitions"]

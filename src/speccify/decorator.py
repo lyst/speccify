@@ -7,17 +7,30 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
 
+serializer_registry = {}
+
+
+class QueryParams:
+    pass
+
+
+class PostData:
+    pass
+
 
 class CustomDataclassSerializer(DataclassSerializer):
     def build_dataclass_field(self, field_name: str, type_info):
         """
         Create fields for dataclasses.
         """
+        base_type = type_info.base_type
+        if base_type not in serializer_registry:
+            serializer_registry[base_type] = type(
+                f"{base_type.__name__}Serializer", (DataclassSerializer,), {}
+            )
 
-        field_class = type(
-            f"DCS__{type_info.base_type.__name__}Serializer", (DataclassSerializer,), {}
-        )
-        field_kwargs = {"dataclass": type_info.base_type, "many": type_info.is_many}
+        field_class = serializer_registry[base_type]
+        field_kwargs = {"dataclass": base_type, "many": type_info.is_many}
         return field_class, field_kwargs
 
 
@@ -35,9 +48,9 @@ def foo_api(*, data_class, methods, responses, permissions):
     class ResponseMeta:
         dataclass = response_cls
 
-    serializer_name = f"{response_cls.__name__}Serializer"
+    response_serializer_name = f"{response_cls.__name__}Serializer"
     response_serializer_cls = type(
-        "foo", (CustomDataclassSerializer,), {"Meta": ResponseMeta}
+        response_serializer_name, (CustomDataclassSerializer,), {"Meta": ResponseMeta}
     )
 
     def decorator_wrapper(view_func):
