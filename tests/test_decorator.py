@@ -6,9 +6,7 @@ from typing import Annotated, Optional
 from urllib.parse import urlencode
 
 import pytest
-from django.test.client import RequestFactory
 from django.urls import path
-from drf_spectacular.views import SpectacularAPIView
 from rest_framework.request import Request
 
 from speccify.decorator import (
@@ -18,6 +16,7 @@ from speccify.decorator import (
     registered_class_names,
     serializer_registry,
 )
+from tests.helpers import get_schema
 
 
 @pytest.fixture(autouse=True)
@@ -39,21 +38,6 @@ class Person:
 @dataclass
 class Display:
     length: str
-
-
-def _get_schema(urlpatterns):
-    rf = RequestFactory()
-
-    urlconf = types.ModuleType("urlconf")
-    urlconf.urlpatterns = urlpatterns
-
-    schema_view = SpectacularAPIView.as_view(urlconf=urlpatterns)
-    schema_request = rf.get("schema")
-    schema_response = schema_view(request=schema_request, format="json")
-
-    schema_response.render()
-    schema = json.loads(schema_response.content.decode())
-    return schema
 
 
 def test_basic(rf):
@@ -94,7 +78,7 @@ def test_schema(rf):
     urlpatterns = [
         path("view", view),
     ]
-    schema = _get_schema(urlpatterns)
+    schema = get_schema(urlpatterns)
     paths = schema["paths"]
     assert "/view" in paths
     assert "post" in paths["/view"]
@@ -282,7 +266,7 @@ def test_stacking(rf):
         path("single", view_single),
         path("multiple", view_get),
     ]
-    schema = _get_schema(urlpatterns)
+    schema = get_schema(urlpatterns)
 
     paths = schema["paths"]
     assert "/single" in paths
