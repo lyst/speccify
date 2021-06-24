@@ -190,6 +190,33 @@ def api_view(
     permissions,
     default_response_code=status.HTTP_200_OK,
 ):
+    """Decorator to annotate views. Calls drf's api_view and drf-spectacular's extend_schema
+
+    Usage:
+
+    >>>  @dataclass
+    >>>  class MyQueryData():
+    >>>      name: str
+
+    >>>  @dataclass
+    >>>  class MyResponse:
+    >>>      length: int
+
+    >>>  @api_view(methods=["GET"], permissions=[])
+    >>>  def my_view(request: Request, my_query: QueryParams[MyQueryData]) -> MyResponse:
+    >>>      name = my_query.name
+    >>>      length = len(name)
+    >>>      return MyResponse(length=length)
+
+    To use different views for the same url (with different http methods), define the first one as above, and then add subsequent ones using `my_view.add`
+
+    >>>  @my_view.add(methods=["POST"])
+    >>>  def my_other_view(...)
+    >>>      ...
+
+    `.add()` doesn't accept the `permissions`, since they must be shared with the original view
+    """
+
     def decorator_wrapper(view_func):
         main_view_name = view_func.__name__
         view_descriptor = ViewDescriptor.from_view(view_func)
