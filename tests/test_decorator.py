@@ -7,11 +7,10 @@ from urllib.parse import urlencode
 import pytest
 from django.test.client import RequestFactory
 from django.urls import path
-from drf_yasg import openapi
-from drf_yasg.views import get_schema_view
+from drf_spectacular.views import SpectacularAPIView
 from rest_framework.request import Request
 
-from speccify.decorator import QueryParams, RequestData, foo_api
+from speccify.decorator import QueryParams, RequestData, api_view
 
 
 @dataclass
@@ -30,19 +29,9 @@ def _get_schema(urlpatterns):
     urlconf = types.ModuleType("urlconf")
     urlconf.urlpatterns = urlpatterns
 
-    schema_view = get_schema_view(
-        openapi.Info(
-            title="",
-            default_version="v1",
-        ),
-        public=True,
-        urlconf=urlconf,
-    )
-
+    schema_view = SpectacularAPIView.as_view(urlconf=urlpatterns)
     schema_request = rf.get("schema")
-    schema_response = schema_view.without_ui(cache_timeout=0)(
-        request=schema_request, format=".json"
-    )
+    schema_response = schema_view(request=schema_request, format="json")
 
     schema_response.render()
     schema = json.loads(schema_response.content.decode())
@@ -50,7 +39,7 @@ def _get_schema(urlpatterns):
 
 
 def test_basic(rf):
-    @foo_api(
+    @api_view(
         methods=["GET"],
         permissions=[],
     )
@@ -66,22 +55,22 @@ def test_basic(rf):
 def test_schema(rf):
     @dataclass
     class Child1:
-        pass
+        c1: str
 
     @dataclass
     class Child2:
-        pass
+        c1: str
 
     @dataclass
-    class Parent:
+    class Parent(RequestData):
         child1: Child1
         child2: Child2
 
-    @foo_api(
-        methods=["GET"],
+    @api_view(
+        methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, person: Person) -> Parent:
+    def view(request: Request, person: Parent) -> None:
         pass
 
     urlpatterns = [
@@ -90,9 +79,9 @@ def test_schema(rf):
     schema = _get_schema(urlpatterns)
     paths = schema["paths"]
     assert "/view" in paths
-    assert "get" in paths["/view"]
+    assert "post" in paths["/view"]
 
-    assert "Child1" in schema["definitions"]
+    assert "Child1" in schema["components"]["schemas"]
 
 
 @dataclass
@@ -121,7 +110,7 @@ class MyDefaultResponse:
 
 
 def test_query_params(rf):
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view(request: Request, my_query: MyQueryData) -> MyResponse:
         foo = my_query.q
         bar = len(foo)
@@ -133,7 +122,7 @@ def test_query_params(rf):
 
 
 def test_extra_query_params(rf):
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view(request: Request, my_query: MyQueryData) -> None:
         assert not hasattr(my_query, "r")
         return
@@ -144,7 +133,7 @@ def test_extra_query_params(rf):
 
 
 def test_default_query_params(rf):
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view(request: Request, my_query: MyDefaultQueryData) -> None:
         return
 
@@ -154,7 +143,7 @@ def test_default_query_params(rf):
 
 
 def test_default_response_key(rf):
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view(request: Request) -> MyDefaultResponse:
         return MyDefaultResponse()
 
@@ -172,14 +161,14 @@ def test_raise_type_error_if_optional_not_provided():
         return None
 
     with pytest.raises(TypeError) as exc_info:
-        foo_api(methods=["GET"], permissions=[])(view)
+        api_view(methods=["GET"], permissions=[])(view)
 
     assert "Optional fields must provide a default" in str(exc_info.value)
     assert "OptionalWithoutDefault'>.q`." in str(exc_info.value)
 
 
 def test_post_data(rf):
-    @foo_api(
+    @api_view(
         methods=["POST"],
         permissions=[],
     )
@@ -198,7 +187,7 @@ def test_urlencoded_request_data(rf):
     class MyData(RequestData):
         foo: str
 
-    @foo_api(
+    @api_view(
         methods=["PUT"],
         permissions=[],
     )
@@ -223,7 +212,7 @@ def test_disallows_multiple_query_param_arguments():
 
     with pytest.raises(TypeError) as exc_info:
 
-        @foo_api(
+        @api_view(
             methods=["GET"],
             permissions=[],
         )
@@ -246,11 +235,11 @@ def test_stacking(rf):
     class MyResponse:
         r: str
 
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view_single(request: Request, my_data: MyQueryData) -> MyResponse:
         pass
 
-    @foo_api(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"], permissions=[])
     def view_get(request: Request, my_data: MyQueryData) -> MyResponse:
         return MyResponse(r="get")
 

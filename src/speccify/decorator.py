@@ -6,9 +6,10 @@ import typing
 from dataclasses import dataclass
 from typing import Any, Dict, Union
 
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view as drf_api_view
+from rest_framework.decorators import permission_classes
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
 
@@ -82,7 +83,7 @@ def _make_serializer(data_class):
     return serializer_registry[data_class]
 
 
-def add_more_methods(view_func, methods):
+def add_methods(view_func, methods):
     # small hack to attach more http methods to a view already decorated with drf.api_view
 
     # assumes something else has checked that these methods are not already set
@@ -148,24 +149,24 @@ class ViewDescriptor:
         title, summary = parts
         return title, summary
 
-    def swagger_auto_schema_kwargs(self, methods, default_response_code):
+    def extend_schema_kwargs(self, methods, default_response_code):
         kwargs = {}
         for key, serializer_cls in self.injected_params.items():
             if issubclass(serializer_cls.Meta.dataclass, QueryParams):
-                kwargs["query_serializer"] = serializer_cls
+                kwargs["parameters"] = [serializer_cls]
             if issubclass(serializer_cls.Meta.dataclass, RequestData):
-                kwargs["request_body"] = serializer_cls
+                kwargs["request"] = serializer_cls
 
         kwargs["methods"] = methods
         kwargs["responses"] = {default_response_code: self.response_serializer_cls}
 
         title, summary = self.docs()
-        kwargs["operation_summary"] = title
-        kwargs["operation_description"] = summary
+        kwargs["summary"] = title
+        kwargs["description"] = summary
         return kwargs
 
 
-def foo_api(
+def api_view(
     *,
     methods,
     permissions,
@@ -181,13 +182,15 @@ def foo_api(
             method_map[method] = view_descriptor
 
         @functools.wraps(view_func)
-        @swagger_auto_schema(
-            **view_descriptor.swagger_auto_schema_kwargs(methods, default_response_code)
+        @extend_schema(
+            **view_descriptor.extend_schema_kwargs(methods, default_response_code)
         )
-        @api_view(methods)
+        @drf_api_view(methods)
         @permission_classes(permissions)
         def wrapper(request, **kwargs):
-            assert request.method in method_map, "api_view.methods should ensure this"
+            assert (
+                request.method in method_map
+            ), "drf_api_view.methods should ensure this"
             view_descriptor = method_map[request.method]
             view_kwargs = {}
             for key, serializer_cls in view_descriptor.injected_params.items():
@@ -217,7 +220,7 @@ def foo_api(
                 status=200, data=dataclasses.asdict(response_serializer.validated_data)
             )
 
-        # TODO: can we share this with foo_api better?
+        # TODO: can we share this with api_view better?
         def add(
             *,
             methods,
@@ -230,13 +233,13 @@ def foo_api(
                         method not in method_map
                     ), "overlapping methods are not allowed"
                     method_map[method] = view_descriptor
-                add_more_methods(wrapper, methods)
-                swagger_decorator = swagger_auto_schema(
-                    **view_descriptor.swagger_auto_schema_kwargs(
+                add_methods(wrapper, methods)
+                extend_schema_decorator = extend_schema(
+                    **view_descriptor.extend_schema_kwargs(
                         methods, default_response_code
                     )
                 )
-                swagger_decorator(wrapper)
+                extend_schema_decorator(wrapper)
 
                 # this view should not be attached to an url, or ever called. to call it, call the
                 # "parent" view using a request with a matching method for this view
@@ -244,8 +247,6 @@ def foo_api(
 
             return decorator_wrapper
 
-        # TODO: name
-        # dispatch, add, add_view, mount, ..?
         wrapper.add = add
         return wrapper
 
