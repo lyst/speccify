@@ -25,10 +25,10 @@ class _Marker:
         self.name = name
 
     def __str__(self):
-        return f"<{self.name}>"
+        return repr(self)
 
     def __repr__(self):
-        return str(self)
+        return f"<{self.name}>"
 
 
 _query_params = _Marker("QueryParams")
