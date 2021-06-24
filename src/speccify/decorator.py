@@ -1,12 +1,13 @@
+import inspect
 import functools
 from dataclasses import asdict, dataclass
+from typing import Any, List
 
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from typing import Any, List
 
 serializer_registry = {}
 
@@ -40,6 +41,15 @@ class CustomDataclassSerializer(DataclassSerializer):
         return field_class, field_kwargs
 
 
+def _make_serializer(data_class):
+    class Meta:
+        dataclass = data_class
+
+    serializer_name = f"{data_class.__name__}Serializer"
+    serializer_cls = type(serializer_name, (CustomDataclassSerializer,), {"Meta": Meta})
+    return serializer_cls
+
+
 def foo_api(
     *,
     methods,
@@ -47,8 +57,6 @@ def foo_api(
     default_response_code=status.HTTP_200_OK,
 ):
     def decorator_wrapper(view_func):
-
-        import inspect
 
         signature = inspect.signature(view_func)
         query_param_entries = {}
@@ -63,16 +71,7 @@ def foo_api(
         if len(query_param_entries) == 1:
             (query_data_key,) = query_param_entries.keys()
             (query_data_class,) = query_param_entries.values()
-
-            class QueryDataMeta:
-                dataclass = query_data_class
-
-            query_serializer_name = f"{query_data_class.__name__}Serializer"
-            query_serializer_cls = type(
-                query_serializer_name,
-                (CustomDataclassSerializer,),
-                {"Meta": QueryDataMeta},
-            )
+            query_serializer_cls = _make_serializer(query_data_class)
 
         elif len(query_param_entries) == 0:
             query_data_key = None
@@ -84,16 +83,7 @@ def foo_api(
         if len(request_data_entries) == 1:
             (request_data_key,) = request_data_entries.keys()
             (request_data_class,) = request_data_entries.values()
-
-            class RequestDataMeta:
-                dataclass = request_data_class
-
-            request_serializer_name = f"{request_data_class.__name__}Serializer"
-            request_serializer_cls = type(
-                request_serializer_name,
-                (CustomDataclassSerializer,),
-                {"Meta": RequestDataMeta},
-            )
+            request_serializer_cls = _make_serializer(request_data_class)
 
         elif len(request_data_entries) == 0:
             request_data_key = None
@@ -108,15 +98,7 @@ def foo_api(
         if response_cls is None:
             response_cls = Empty
 
-        class ResponseMeta:
-            dataclass = response_cls
-
-        response_serializer_name = f"{response_cls.__name__}Serializer"
-        response_serializer_cls = type(
-            response_serializer_name,
-            (CustomDataclassSerializer,),
-            {"Meta": ResponseMeta},
-        )
+        response_serializer_cls = _make_serializer(response_cls)
 
         swagger_auto_schema_kwargs = {}
         if query_data_key is not None:
