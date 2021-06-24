@@ -1,5 +1,6 @@
 import functools
 import inspect
+import re
 from dataclasses import asdict, dataclass
 from typing import Any, Dict
 
@@ -120,6 +121,16 @@ class ViewDescriptor:
             response_serializer_cls=response_serializer_cls,
         )
 
+    def docs(self):
+        """Parse docstring into title/summary"""
+
+        # split off using the first blank line
+        parts = re.split(r"\n\s*\n", self.view_func.__doc__ or "", 1)
+        if len(parts) == 1:
+            parts.append("")
+        title, summary = parts
+        return title, summary
+
     def swagger_auto_schema_kwargs(self, methods, default_response_code):
         kwargs = {}
         for key, serializer_cls in self.injected_params.items():
@@ -130,6 +141,10 @@ class ViewDescriptor:
 
         kwargs["methods"] = methods
         kwargs["responses"] = {default_response_code: self.response_serializer_cls}
+
+        title, summary = self.docs()
+        kwargs["operation_summary"] = title
+        kwargs["operation_description"] = summary
         return kwargs
 
 
