@@ -14,7 +14,7 @@ from speccify.decorator import QueryParams, RequestData, api_view
 
 
 @dataclass
-class Person(QueryParams):
+class Person:
     name: str
 
 
@@ -43,7 +43,7 @@ def test_basic(rf):
         methods=["GET"],
         permissions=[],
     )
-    def view(request: Request, person: Person) -> Display:
+    def view(request: Request, person: QueryParams[Person]) -> Display:
         length = len(person.name)
         return Display(length=str(length))
 
@@ -62,7 +62,7 @@ def test_schema(rf):
         c1: str
 
     @dataclass
-    class Parent(RequestData):
+    class Parent:
         child1: Child1
         child2: Child2
 
@@ -70,7 +70,7 @@ def test_schema(rf):
         methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, person: Parent) -> None:
+    def view(request: Request, person: RequestData[Parent]) -> None:
         pass
 
     urlpatterns = [
@@ -85,17 +85,17 @@ def test_schema(rf):
 
 
 @dataclass
-class MyQueryData(QueryParams):
+class MyQueryData:
     q: str
 
 
 @dataclass
-class MyDefaultQueryData(QueryParams):
+class MyDefaultQueryData:
     q: Optional[str] = "foo"
 
 
 @dataclass
-class MyRequestData(RequestData):
+class MyRequestData:
     d: str
 
 
@@ -111,7 +111,7 @@ class MyDefaultResponse:
 
 def test_query_params(rf):
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: MyQueryData) -> MyResponse:
+    def view(request: Request, my_query: QueryParams[MyQueryData]) -> MyResponse:
         foo = my_query.q
         bar = len(foo)
         return MyResponse(r=bar)
@@ -123,7 +123,7 @@ def test_query_params(rf):
 
 def test_extra_query_params(rf):
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: MyQueryData) -> None:
+    def view(request: Request, my_query: QueryParams[MyQueryData]) -> None:
         assert not hasattr(my_query, "r")
         return
 
@@ -134,7 +134,7 @@ def test_extra_query_params(rf):
 
 def test_default_query_params(rf):
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: MyDefaultQueryData) -> None:
+    def view(request: Request, my_query: QueryParams[MyDefaultQueryData]) -> None:
         return
 
     request = rf.get("/")
@@ -154,10 +154,10 @@ def test_default_response_key(rf):
 
 def test_raise_type_error_if_optional_not_provided():
     @dataclass
-    class OptionalWithoutDefault(QueryParams):
+    class OptionalWithoutDefault:
         q: Optional[str]
 
-    def view(request: Request, my_query: OptionalWithoutDefault) -> None:
+    def view(request: Request, my_query: QueryParams[OptionalWithoutDefault]) -> None:
         return None
 
     with pytest.raises(TypeError) as exc_info:
@@ -172,7 +172,7 @@ def test_post_data(rf):
         methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, my_data: MyRequestData) -> MyResponse:
+    def view(request: Request, my_data: RequestData[MyRequestData]) -> MyResponse:
         foo = my_data.d
         bar = len(foo)
         return MyResponse(r=bar)
@@ -184,14 +184,14 @@ def test_post_data(rf):
 
 def test_urlencoded_request_data(rf):
     @dataclass
-    class MyData(RequestData):
+    class MyData:
         foo: str
 
     @api_view(
         methods=["PUT"],
         permissions=[],
     )
-    def view(request: Request, my_query: MyData) -> None:
+    def view(request: Request, my_query: RequestData[MyData]) -> None:
         assert my_query.foo == "bar"
 
     request = rf.put(
@@ -204,10 +204,10 @@ def test_urlencoded_request_data(rf):
 
 def test_disallows_multiple_query_param_arguments():
     @dataclass
-    class D1(QueryParams):
+    class D1:
         foo: str
 
-    class D2(QueryParams):
+    class D2:
         bar: str
 
     with pytest.raises(TypeError) as exc_info:
@@ -216,7 +216,7 @@ def test_disallows_multiple_query_param_arguments():
             methods=["GET"],
             permissions=[],
         )
-        def view(request: Request, d1: D1, d2: D2) -> None:
+        def view(request: Request, d1: QueryParams[D1], d2: QueryParams[D2]) -> None:
             pass
 
     assert "At most one " in str(exc_info.value)
@@ -224,11 +224,11 @@ def test_disallows_multiple_query_param_arguments():
 
 def test_stacking(rf):
     @dataclass
-    class MyQueryData(QueryParams):
+    class MyQueryData:
         q: str
 
     @dataclass
-    class MyRequestData(RequestData):
+    class MyRequestData:
         d: str
 
     @dataclass
@@ -236,15 +236,15 @@ def test_stacking(rf):
         r: str
 
     @api_view(methods=["GET"], permissions=[])
-    def view_single(request: Request, my_data: MyQueryData) -> MyResponse:
+    def view_single(request: Request, my_data: QueryParams[MyQueryData]) -> MyResponse:
         pass
 
     @api_view(methods=["GET"], permissions=[])
-    def view_get(request: Request, my_data: MyQueryData) -> MyResponse:
+    def view_get(request: Request, my_data: QueryParams[MyQueryData]) -> MyResponse:
         return MyResponse(r="get")
 
     @view_get.add(methods=["POST"])
-    def view_post(request: Request, my_data: MyRequestData) -> MyResponse:
+    def view_post(request: Request, my_data: RequestData[MyRequestData]) -> MyResponse:
         return MyResponse(r="post")
 
     get_request = rf.get("/?q=value")

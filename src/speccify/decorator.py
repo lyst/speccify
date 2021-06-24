@@ -1,10 +1,9 @@
 import dataclasses
 import functools
-import inspect
 import re
 import typing
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from typing import Annotated, Any, Dict, Tuple, TypeVar, Union
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -15,13 +14,28 @@ from rest_framework_dataclasses.serializers import DataclassSerializer
 
 serializer_registry = {}
 
+NoneType = type(None)
+_T = TypeVar("_T")
 
-class QueryParams:
-    pass
+
+class _Marker:
+    """Used for marker error messages"""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return f"<{self.name}>"
+
+    def __repr__(self):
+        return str(self)
 
 
-class RequestData:
-    pass
+_query_params = _Marker("QueryParams")
+_request_data = _Marker("RequestData")
+
+QueryParams = Annotated[_T, _query_params]
+RequestData = Annotated[_T, _request_data]
 
 
 @dataclass
@@ -103,7 +117,7 @@ def add_methods(view_func, methods):
 @dataclass
 class ViewDescriptor:
     view_func: Any  # callable?
-    injected_params: Dict[str, DataclassSerializer]
+    injected_params: Dict[str, Tuple[_Marker, DataclassSerializer]]
     response_serializer_cls: DataclassSerializer
 
     @classmethod
@@ -111,24 +125,28 @@ class ViewDescriptor:
         injected_params = {}
         seen_types = set()
 
-        signature = inspect.signature(view_func)
-        for param in signature.parameters.values():
-            annotation = param.annotation
-            for injection_type in (QueryParams, RequestData):
-                if isinstance(annotation, type) and issubclass(
-                    annotation, injection_type
-                ):
-                    if injection_type in seen_types:
-                        raise TypeError(
-                            f"At most one `{injection_type.__name__}` parameter is allowed"
-                        )
-                    injected_params[param.name] = _make_serializer(annotation)
-                    seen_types.add(injection_type)
+        parameters = typing.get_type_hints(view_func, include_extras=True)
 
-        response_cls = signature.return_annotation
-        if response_cls is signature.empty:
+        for name, annotation in parameters.items():
+            if name == "return":
+                continue
+
+            if not typing.get_origin(annotation) is Annotated:
+                continue
+            data_class, marker, *_ = typing.get_args(annotation)
+            if not isinstance(marker, _Marker):
+                continue
+
+            if marker in seen_types:
+                raise TypeError(f"At most one `{marker}` parameter is allowed")
+            serializer = _make_serializer(data_class)
+            injected_params[name] = (marker, serializer)
+            seen_types.add(marker)
+
+        if "return" not in parameters:
             raise TypeError("Response type annotation is required")
-        if response_cls is None:
+        response_cls = parameters["return"]
+        if response_cls is NoneType:
             response_cls = Empty
 
         response_serializer_cls = _make_serializer(response_cls)
@@ -151,10 +169,10 @@ class ViewDescriptor:
 
     def extend_schema_kwargs(self, methods, default_response_code):
         kwargs = {}
-        for key, serializer_cls in self.injected_params.items():
-            if issubclass(serializer_cls.Meta.dataclass, QueryParams):
+        for key, (marker, serializer_cls) in self.injected_params.items():
+            if marker is _query_params:
                 kwargs["parameters"] = [serializer_cls]
-            if issubclass(serializer_cls.Meta.dataclass, RequestData):
+            if marker is _request_data:
                 kwargs["request"] = serializer_cls
 
         kwargs["methods"] = methods
@@ -193,10 +211,13 @@ def api_view(
             ), "drf_api_view.methods should ensure this"
             view_descriptor = method_map[request.method]
             view_kwargs = {}
-            for key, serializer_cls in view_descriptor.injected_params.items():
-                if issubclass(serializer_cls.Meta.dataclass, QueryParams):
+            for key, (
+                marker,
+                serializer_cls,
+            ) in view_descriptor.injected_params.items():
+                if marker is _query_params:
                     serializer = serializer_cls(data=request.query_params)
-                if issubclass(serializer_cls.Meta.dataclass, RequestData):
+                if marker is _request_data:
                     serializer = serializer_cls(data=request.data)
 
                 serializer.is_valid(raise_exception=True)
