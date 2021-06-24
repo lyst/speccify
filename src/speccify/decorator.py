@@ -45,13 +45,8 @@ class CustomDataclassSerializer(DataclassSerializer):
         Create fields for dataclasses.
         """
         base_type = type_info.base_type
-        if base_type not in serializer_registry:
-            serializer_registry[base_type] = type(
-                f"{base_type.__name__}Serializer", (DataclassSerializer,), {}
-            )
-
-        field_class = serializer_registry[base_type]
-        field_kwargs = {"dataclass": base_type, "many": type_info.is_many}
+        field_class = _make_serializer(base_type)
+        field_kwargs = {"many": type_info.is_many}
         return field_class, field_kwargs
 
 
