@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
+from typing import Any, List
 
 serializer_registry = {}
 
@@ -163,3 +164,50 @@ def foo_api(
         return wrapper
 
     return decorator_wrapper
+
+
+@dataclass
+class Dispatch:
+    methods: List[str]
+    permissions: List[Any]
+    view: Any
+
+
+def foo_api_dispatch(entries):
+    # TODO:
+    # this approach means the view doesn't get included in the generated openapi schema
+    # i _think_ that's because the function that we decorate with @swagger_auto_schema is
+    # _different from the view that we mount at the url (with `path('..'. view)`)
+    # see sketch of new approach in dispatch_v2 below
+    method_map = {}
+    for entry in entries:
+        decorator = foo_api(methods=entry.methods, permissions=entry.permissions)
+        decorated = decorator(entry.view)
+        for method in entry.methods:
+            assert method not in method_map, "Can't have overlapping entries"
+            method_map[method] = decorated
+
+    def dispatch_view(request, *a, **k):
+        assert request.method in method_map, "api_view.methods should ensure this"
+
+        view = method_map[request.method]
+        return view(request, *a, **k)
+
+    return dispatch_view
+
+
+# def foo_api_dispatch_v2(entries):
+
+#     def dispatch_view(request, *a, **k):
+#         ...
+
+#     for entry in entries:
+#         @swagger_auto_schema(data)(dispatch_view)
+
+#     return dispatch_view
+
+
+# def foo_api_v2(*args):
+#     def wrapper(view):
+#         return foo_api_dispatch_v2([Dispatch(*args, view=view)]
+#     )

@@ -10,7 +10,13 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework.request import Request
 
-from speccify.decorator import QueryParams, RequestData, foo_api
+from speccify.decorator import (
+    Dispatch,
+    QueryParams,
+    RequestData,
+    foo_api,
+    foo_api_dispatch,
+)
 
 
 @dataclass
@@ -103,10 +109,7 @@ def test_query_params(rf):
     class MyResponse:
         bar: int
 
-    @foo_api(
-        methods=["GET"],
-        permissions=[],
-    )
+    @foo_api(methods=["GET"], permissions=[])
     def view(request: Request, my_query: MyQueryData) -> MyResponse:
         foo = my_query.foo
         bar = len(foo)
@@ -178,3 +181,42 @@ def test_disallows_multiple_query_param_arguments():
             pass
 
     assert "At most one " in str(exc_info.value)
+
+
+def test_stacking(rf):
+    @dataclass
+    class MyQueryData(QueryParams):
+        q: str
+
+    @dataclass
+    class MyRequestData(RequestData):
+        d: str
+
+    @dataclass
+    class MyResponse:
+        r: str
+
+    def view_get(request: Request, my_data: MyQueryData) -> MyResponse:
+        return MyResponse(r="get")
+
+    def view_post(request: Request, my_data: MyRequestData) -> MyResponse:
+        return MyResponse(r="post")
+
+    view = foo_api_dispatch(
+        entries=[
+            Dispatch(methods=["GET"], view=view_get, permissions=[]),
+            Dispatch(methods=["POST"], view=view_post, permissions=[]),
+        ]
+    )
+
+    get_request = rf.get("/?q=value")
+    get_response = view(get_request)
+    assert get_response.data["r"] == "get"
+
+    post_request = rf.post("/", data={"d": "value"})
+    post_response = view(post_request)
+    assert post_response.data["r"] == "post"
+
+    urlpatterns = [path("foo", view)]
+    schema = _get_schema(urlpatterns)
+    assert schema
