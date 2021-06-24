@@ -101,8 +101,8 @@ def add_methods(view_func, methods):
     # small hack to attach more http methods to a view already decorated with drf.api_view
 
     # assumes something else has checked that these methods are not already set
+    # we check before calling `add_methods`
     existing_methods = view_func.cls.http_method_names
-    # TODO: re-check for overlap?
 
     # we just need access to the handler, which is the same for all methods except `options` (which
     # is added by drf with a custom handler)
@@ -241,7 +241,6 @@ def api_view(
                 status=200, data=dataclasses.asdict(response_serializer.validated_data)
             )
 
-        # TODO: can we share this with api_view better?
         def add(
             *,
             methods,
