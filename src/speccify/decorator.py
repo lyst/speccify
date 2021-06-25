@@ -1,16 +1,17 @@
 import dataclasses
 import functools
 import re
-import typing
 from dataclasses import dataclass
-from typing import Annotated, Any, Dict, Tuple, TypeVar, Union
+from typing import Any, Dict, Tuple, TypeVar, Union
 
+import typing_extensions
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view as drf_api_view
 from rest_framework.decorators import permission_classes
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
+from typing_extensions import Annotated
 
 serializer_registry = {}
 registered_class_names = {}
@@ -71,9 +72,9 @@ class CustomDataclassSerializer(DataclassSerializer):
 
 def _is_optional(field_type):
     # https://stackoverflow.com/questions/56832881/check-if-a-field-is-typing-optional
-    return typing.get_origin(field_type) is Union and type(None) in typing.get_args(
-        field_type
-    )
+    return typing_extensions.get_origin(field_type) is Union and type(
+        None
+    ) in typing_extensions.get_args(field_type)
 
 
 def _make_serializer(data_class):
@@ -139,15 +140,15 @@ class ViewDescriptor:
         injected_params = {}
         seen_types = set()
 
-        parameters = typing.get_type_hints(view_func, include_extras=True)
+        parameters = typing_extensions.get_type_hints(view_func, include_extras=True)
 
         for name, annotation in parameters.items():
             if name == "return":
                 continue
 
-            if not typing.get_origin(annotation) is Annotated:
+            if not typing_extensions.get_origin(annotation) is Annotated:
                 continue
-            data_class, marker, *_ = typing.get_args(annotation)
+            data_class, marker, *_ = typing_extensions.get_args(annotation)
             if not isinstance(marker, _Marker):
                 continue
 

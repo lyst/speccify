@@ -2,12 +2,13 @@ import json
 import sys
 import types
 from dataclasses import dataclass
-from typing import Annotated, Optional
+from typing import Optional
 from urllib.parse import urlencode
 
 import pytest
 from django.urls import path
 from rest_framework.request import Request
+from typing_extensions import Annotated
 
 from speccify.decorator import QueryParams, RequestData, api_view
 from tests.helpers import get_schema
