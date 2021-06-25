@@ -12,6 +12,8 @@ drf-spectacular = "*"
 typing-extensions = "*"
 
 [tool.poetry.dev-dependencies]
+black = "*"
+flake8 = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-django = "*"
