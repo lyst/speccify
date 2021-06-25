@@ -33,11 +33,11 @@ class _Marker:
         return f"<{self.name}>"
 
 
-_query_params = _Marker("QueryParams")
-_request_data = _Marker("RequestData")
+_query_params = _Marker("Query")
+_request_data = _Marker("Data")
 
-QueryParams = Annotated[_T, _query_params]
-RequestData = Annotated[_T, _request_data]
+Query = Annotated[_T, _query_params]
+Data = Annotated[_T, _request_data]
 
 
 @dataclass
@@ -218,7 +218,7 @@ def api_view(
     >>>      length: int
 
     >>>  @api_view(methods=["GET"], permissions=[])
-    >>>  def my_view(request: Request, my_query: QueryParams[MyQueryData]) -> MyResponse:
+    >>>  def my_view(request: Request, my_query: Query[MyQueryData]) -> MyResponse:
     >>>      name = my_query.name
     >>>      length = len(name)
     >>>      return MyResponse(length=length)

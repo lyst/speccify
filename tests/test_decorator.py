@@ -10,7 +10,7 @@ from django.urls import path
 from rest_framework.request import Request
 from typing_extensions import Annotated
 
-from speccify.decorator import QueryParams, RequestData, api_view
+from speccify.decorator import Query, Data, api_view
 from tests.helpers import get_schema
 
 
@@ -29,7 +29,7 @@ def test_basic(rf):
         methods=["GET"],
         permissions=[],
     )
-    def view(request: Request, person: QueryParams[Person]) -> Display:
+    def view(request: Request, person: Query[Person]) -> Display:
         length = len(person.name)
         return Display(length=str(length))
 
@@ -56,7 +56,7 @@ def test_schema(rf):
         methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, person: RequestData[Parent]) -> None:
+    def view(request: Request, person: Data[Parent]) -> None:
         pass  # pragma: no cover
 
     urlpatterns = [
@@ -76,7 +76,7 @@ class MyQueryData:
 
 
 @dataclass
-class MyRequestData:
+class MyData:
     d: str
 
 
@@ -87,7 +87,7 @@ class MyResponse:
 
 def test_query_params(rf):
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: QueryParams[MyQueryData]) -> MyResponse:
+    def view(request: Request, my_query: Query[MyQueryData]) -> MyResponse:
         foo = my_query.q
         bar = len(foo)
         return MyResponse(r=str(bar))
@@ -99,7 +99,7 @@ def test_query_params(rf):
 
 def test_extra_query_params(rf):
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: QueryParams[MyQueryData]) -> None:
+    def view(request: Request, my_query: Query[MyQueryData]) -> None:
         assert not hasattr(my_query, "r")
         return
 
@@ -114,7 +114,7 @@ def test_default_query_params(rf):
         q: Optional[str] = "foo"
 
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Request, my_query: QueryParams[MyDefaultQueryData]) -> None:
+    def view(request: Request, my_query: Query[MyDefaultQueryData]) -> None:
         return
 
     request = rf.get("/")
@@ -141,7 +141,7 @@ def test_raise_type_error_if_optional_not_provided():
     class OptionalWithoutDefault:
         q: Optional[str]
 
-    def view(request: Request, my_query: QueryParams[OptionalWithoutDefault]) -> None:
+    def view(request: Request, my_query: Query[OptionalWithoutDefault]) -> None:
         pass  # pragma: no cover
 
     with pytest.raises(TypeError) as exc_info:
@@ -156,7 +156,7 @@ def test_post_data(rf):
         methods=["POST"],
         permissions=[],
     )
-    def view(request: Request, my_data: RequestData[MyRequestData]) -> MyResponse:
+    def view(request: Request, my_data: Data[MyData]) -> MyResponse:
         foo = my_data.d
         bar = len(foo)
         return MyResponse(r=str(bar))
@@ -175,7 +175,7 @@ def test_urlencoded_request_data(rf):
         methods=["PUT"],
         permissions=[],
     )
-    def view(request: Request, my_query: RequestData[MyData]) -> None:
+    def view(request: Request, my_query: Data[MyData]) -> None:
         assert my_query.foo == "bar"
 
     request = rf.put(
@@ -200,7 +200,7 @@ def test_disallows_multiple_query_param_arguments():
             methods=["GET"],
             permissions=[],
         )
-        def view(request: Request, d1: QueryParams[D1], d2: QueryParams[D2]) -> None:
+        def view(request: Request, d1: Query[D1], d2: Query[D2]) -> None:
             pass  # pragma: no cover
 
     assert "At most one " in str(exc_info.value)
@@ -212,7 +212,7 @@ def test_stacking(rf):
         q: str
 
     @dataclass
-    class MyRequestData:
+    class MyData:
         d: str
 
     @dataclass
@@ -220,15 +220,15 @@ def test_stacking(rf):
         r: str
 
     @api_view(methods=["GET"], permissions=[])
-    def view_single(request: Request, my_data: QueryParams[MyQueryData]) -> MyResponse:
+    def view_single(request: Request, my_data: Query[MyQueryData]) -> MyResponse:
         pass  # pragma: no cover
 
     @api_view(methods=["GET"], permissions=[])
-    def view_get(request: Request, my_data: QueryParams[MyQueryData]) -> MyResponse:
+    def view_get(request: Request, my_data: Query[MyQueryData]) -> MyResponse:
         return MyResponse(r="get")
 
     @view_get.add(methods=["POST"])
-    def view_post(request: Request, my_data: RequestData[MyRequestData]) -> MyResponse:
+    def view_post(request: Request, my_data: Data[MyData]) -> MyResponse:
         return MyResponse(r="post")
 
     get_request = rf.get("/?q=value")
@@ -273,7 +273,7 @@ def test_nested_serializer(rf):
     my_query_value = None
 
     @api_view(methods=["POST"], permissions=[])
-    def view(request: Request, my_query: RequestData[Parent]) -> None:
+    def view(request: Request, my_query: Data[Parent]) -> None:
         nonlocal my_query_value
         my_query_value = my_query
 
@@ -290,7 +290,7 @@ def test_non_marker_annotation(rf):
         q: str
 
     @api_view(methods=["GET"], permissions=[])
-    def view(request: Annotated[Request, ""], my_query: QueryParams[Data]) -> None:
+    def view(request: Annotated[Request, ""], my_query: Query[Data]) -> None:
         pass
 
     request = rf.get("/?q=value")
