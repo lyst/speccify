@@ -1,5 +1,6 @@
 [tool.poetry]
 name = "speccify"
+# please update CHANGELOG when bumping this
 version = "0.1.0"
 description = "Tie together `drf-spectacular` and `djangorestframework-dataclasses` for easy-to-use apis and openapi schemas."
 authors = ["Lyst Ltd. <devs@lyst.com>"]
