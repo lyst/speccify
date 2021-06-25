@@ -3,6 +3,8 @@ name = "speccify"
 version = "0.1.0"
 description = "Tie together `drf-spectacular` and `djangorestframework-dataclasses` for easy-to-use apis and openapi schemas."
 authors = ["Lyst Ltd. <devs@lyst.com>"]
+readme = "README.md"
+license = "Apache-2.0"
 
 [tool.poetry.dependencies]
 python = "^3.7"
