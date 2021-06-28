@@ -4,6 +4,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 import pytest
+from django.test import Client
 from django.urls import path
 from rest_framework.request import Request
 from typing_extensions import Annotated
@@ -320,3 +321,48 @@ def test_url_path_params(client):
     assert response.status_code == 200
 
 
+def test_invalid_return_value(rf):
+    @dataclass
+    class Return:
+        field: str
+
+    @dataclass
+    class Other:
+        other_field: int
+
+    @api_view(
+        methods=["GET"],
+        permissions=[],
+    )
+    def view1(request: Request) -> Return:
+        return None
+
+    @api_view(
+        methods=["GET"],
+        permissions=[],
+    )
+    def view2(request: Request) -> Return:
+        return Other(other_field=0)
+
+    request = rf.get("/?name=value")
+    with pytest.raises(AssertionError) as exc_info:
+        view1(request)
+    assert "response must be a dataclass" in str(exc_info.value)
+
+    with pytest.raises(TypeError) as exc_info:
+        view2(request)
+    assert "Invalid data returned from view" in str(exc_info.value)
+
+    urlpatterns = [
+        path("view1/", view1),
+        path("view2/", view2),
+    ]
+
+    client = Client(raise_request_exception=False)
+
+    with root_urlconf(urlpatterns):
+        response = client.get("/view1/")
+        assert response.status_code == 500
+
+        response = client.get("/view2/")
+        assert response.status_code == 500

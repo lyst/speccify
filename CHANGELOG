@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.2.0] - 2021-06-29
+
+- Bad return values from views are server errors, not 400
+
 ## [0.1.1] - 2021-06-28
 
 - Expose public api in top level namespace

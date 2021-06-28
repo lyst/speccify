@@ -282,11 +282,18 @@ def api_view(
                     response_data is None
                 ), "Type signature says response is None, but view returned data"
                 response_data = Empty()
+            else:
+                assert dataclasses.is_dataclass(
+                    response_data
+                ), f"response must be a dataclass, got {response_data}"
 
             response_serializer = view_descriptor.response_serializer_cls(
                 data=dataclasses.asdict(response_data)
             )
-            response_serializer.is_valid(raise_exception=True)
+            if not response_serializer.is_valid():
+                raise TypeError(
+                    f"Invalid data returned from view: {response_serializer.errors}"
+                )
 
             return Response(
                 status=200, data=dataclasses.asdict(response_serializer.validated_data)
