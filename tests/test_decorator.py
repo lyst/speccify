@@ -10,7 +10,7 @@ from django.urls import path
 from rest_framework.request import Request
 from typing_extensions import Annotated
 
-from speccify.decorator import Query, Data, api_view
+from speccify.decorator import Data, Query, api_view
 from tests.helpers import get_schema
 
 

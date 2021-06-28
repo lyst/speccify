@@ -2,22 +2,31 @@ import dataclasses
 import functools
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Type, TypeVar, Union
 
 import typing_extensions
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view as drf_api_view
 from rest_framework.decorators import permission_classes
+from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from typing_extensions import Annotated
+
+from .typing import ApiView, DecoratorFactory, View, attach_add
 
 serializer_registry = {}
 registered_class_names = {}
 
 NoneType = type(None)
 _T = TypeVar("_T")
+
+PermissionClasses = Sequence[Union[BasePermission, Type[BasePermission]]]
+
+
+F = TypeVar("F", bound=Callable[..., object])
 
 
 class _Marker:
@@ -201,10 +210,10 @@ class ViewDescriptor:
 
 def api_view(
     *,
-    methods,
-    permissions,
-    default_response_code=status.HTTP_200_OK,
-):
+    methods: List[str],
+    permissions: PermissionClasses,
+    default_response_code: int = status.HTTP_200_OK,
+) -> Callable[[F], ApiView[View, DecoratorFactory[AbsorbedView]]]:
     """Decorator to annotate views. Calls drf's api_view and drf-spectacular's extend_schema
 
     Usage:
@@ -232,7 +241,7 @@ def api_view(
     `.add()` doesn't accept the `permissions`, since they must be shared with the original view
     """
 
-    def decorator_wrapper(view_func):
+    def decorator_wrapper(view_func: Callable[..., Any]) -> ApiView:
         main_view_name = view_func.__name__
         view_descriptor = ViewDescriptor.from_view(view_func)
 
@@ -247,7 +256,7 @@ def api_view(
         )
         @drf_api_view(methods)
         @permission_classes(permissions)
-        def wrapper(request, **kwargs):
+        def wrapper(request: Request, **kwargs) -> Response:
             assert (
                 request.method in method_map
             ), "drf_api_view.methods should ensure this"
@@ -285,10 +294,10 @@ def api_view(
 
         def add(
             *,
-            methods,
-            default_response_code=status.HTTP_200_OK,
-        ):
-            def decorator_wrapper(view_func):
+            methods: List[str],
+            default_response_code: int = status.HTTP_200_OK,
+        ) -> Callable[..., Any]:
+            def decorator_wrapper(view_func: Callable[..., Any]) -> AbsorbedView:
                 view_descriptor = ViewDescriptor.from_view(view_func)
                 for method in methods:
                     assert (
@@ -309,7 +318,7 @@ def api_view(
 
             return decorator_wrapper
 
-        wrapper.add = add
+        wrapper = attach_add(wrapper, add)
         wrapper._speccify_api = True
         return wrapper
 
