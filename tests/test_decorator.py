@@ -1,6 +1,4 @@
 import json
-import sys
-import types
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlencode
@@ -11,7 +9,7 @@ from rest_framework.request import Request
 from typing_extensions import Annotated
 
 from speccify.decorator import Data, Query, api_view
-from tests.helpers import get_schema
+from tests.helpers import get_schema, root_urlconf
 
 
 @dataclass
@@ -308,7 +306,7 @@ def test_missing_return_annotation(rf):
     assert "Response type annotation is required" in str(exc_info.value)
 
 
-def test_url_path_params(settings, client):
+def test_url_path_params(client):
     @api_view(methods=["GET"], permissions=[])
     def view(request: Request, param: str) -> None:
         pass
@@ -317,11 +315,8 @@ def test_url_path_params(settings, client):
         path("<slug:param>/", view, name="view"),
     ]
 
-    urls_module = types.ModuleType("test_urls_module")
-    urls_module.urlpatterns = urlpatterns
-
-    sys.modules["test_urls_module"] = urls_module
-
-    settings.ROOT_URLCONF = "test_urls_module"
-    response = client.get("/value/")
+    with root_urlconf(urlpatterns):
+        response = client.get("/value/")
     assert response.status_code == 200
+
+
