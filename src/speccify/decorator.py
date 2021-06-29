@@ -291,9 +291,8 @@ def api_view(
                 data=dataclasses.asdict(response_data)
             )
             if not response_serializer.is_valid():
-                raise TypeError(
-                    f"Invalid data returned from view: {response_serializer.errors}"
-                )
+                errors = response_serializer.errors
+                raise TypeError(f"Invalid data returned from view: {errors}")
 
             return Response(
                 status=200, data=dataclasses.asdict(response_serializer.validated_data)
