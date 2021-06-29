@@ -1,7 +1,9 @@
 import json
+import sys
 import types
+from contextlib import contextmanager
 
-from django.test.client import RequestFactory
+from django.test import RequestFactory, override_settings
 from drf_spectacular.views import SpectacularAPIView
 
 from speccify.generator import SpeccifySchemaGenerator
@@ -22,3 +24,14 @@ def get_schema(urlpatterns):
     schema_response.render()
     schema = json.loads(schema_response.content.decode())
     return schema
+
+
+@contextmanager
+def root_urlconf(urlpatterns):
+    urls_module = types.ModuleType("test_urls_module")
+    urls_module.urlpatterns = urlpatterns
+
+    sys.modules["test_urls_module"] = urls_module
+
+    with override_settings(ROOT_URLCONF="test_urls_module"):
+        yield

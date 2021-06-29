@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "speccify"
 # please update CHANGELOG when bumping this
-version = "0.1.1"
+version = "0.2.0"
 description = "Tie together `drf-spectacular` and `djangorestframework-dataclasses` for easy-to-use apis and openapi schemas."
 authors = ["Lyst Ltd. <devs@lyst.com>"]
 readme = "README.md"
@@ -33,3 +33,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
 profile = "black"
+
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --tb=short"
