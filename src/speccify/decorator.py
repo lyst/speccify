@@ -2,14 +2,12 @@ import dataclasses
 import functools
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Tuple, TypeVar, Union
 
 import typing_extensions
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view as drf_api_view
-from rest_framework.decorators import permission_classes
-from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
@@ -23,8 +21,6 @@ registered_class_names = {}
 
 NoneType = type(None)
 _T = TypeVar("_T")
-
-PermissionClasses = Sequence[Union[BasePermission, Type[BasePermission]]]
 
 
 F = TypeVar("F", bound=Callable[..., object])
@@ -212,7 +208,6 @@ class ViewDescriptor:
 def api_view(
     *,
     methods: List[str],
-    permissions: PermissionClasses,
     default_response_code: int = status.HTTP_200_OK,
 ) -> Callable[[F], ApiView[View, DecoratorFactory[AbsorbedView]]]:
     """Decorator to annotate views. Calls drf's api_view and drf-spectacular's extend_schema
@@ -227,19 +222,22 @@ def api_view(
     >>>  class MyResponse:
     >>>      length: int
 
-    >>>  @api_view(methods=["GET"], permissions=[])
+    >>>  @api_view(methods=["GET"])
     >>>  def my_view(request: Request, my_query: Query[MyQueryData]) -> MyResponse:
     >>>      name = my_query.name
     >>>      length = len(name)
     >>>      return MyResponse(length=length)
 
-    To use different views for the same url (with different http methods), define the first one as above, and then add subsequent ones using `my_view.add`
+    To use different views for the same url (with different http methods), define the
+    first one as above, and then add subsequent ones using `my_view.add`
 
     >>>  @my_view.add(methods=["POST"])
     >>>  def my_other_view(...)
     >>>      ...
 
-    `.add()` doesn't accept the `permissions`, since they must be shared with the original view
+    Note that when using `.add()`, permissions are shared, and so the
+    `@permission_classes` decorator must only be used on the original view. Each url
+    can only have a single set of permissions
     """
 
     def decorator_wrapper(view_func: Callable[..., Any]) -> ApiView:
@@ -252,12 +250,11 @@ def api_view(
                 raise OverlappingMethods()
             method_map[method] = view_descriptor
 
-        @functools.wraps(view_func)
         @extend_schema(
             **view_descriptor.extend_schema_kwargs(methods, default_response_code)
         )
         @drf_api_view(methods)
-        @permission_classes(permissions)
+        @functools.wraps(view_func)
         def wrapper(request: Request, **kwargs) -> Response:
             assert (
                 request.method in method_map
@@ -308,6 +305,11 @@ def api_view(
             default_response_code: int = status.HTTP_200_OK,
         ) -> Callable[..., Any]:
             def decorator_wrapper(view_func: Callable[..., Any]) -> AbsorbedView:
+                if hasattr(view_func, "permission_classes"):
+                    raise CollectionError(
+                        "`@permission_classes` are shared with the parent view and must only be set there"
+                    )
+
                 view_descriptor = ViewDescriptor.from_view(view_func)
                 for method in methods:
                     if method in method_map:

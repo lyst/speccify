@@ -6,6 +6,8 @@ from urllib.parse import urlencode
 import pytest
 from django.test import Client
 from django.urls import path
+from rest_framework import permissions
+from rest_framework.decorators import permission_classes
 from rest_framework.request import Request
 from typing_extensions import Annotated
 
@@ -25,10 +27,7 @@ class Display:
 
 
 def test_basic(rf):
-    @api_view(
-        methods=["GET"],
-        permissions=[],
-    )
+    @api_view(methods=["GET"])
     def view(request: Request, person: Query[Person]) -> Display:
         length = len(person.name)
         return Display(length=str(length))
@@ -52,10 +51,7 @@ def test_schema(rf):
         child1: Child1
         child2: Child2
 
-    @api_view(
-        methods=["POST"],
-        permissions=[],
-    )
+    @api_view(methods=["POST"])
     def view(request: Request, person: Data[Parent]) -> None:
         pass  # pragma: no cover
 
@@ -86,7 +82,7 @@ class MyResponse:
 
 
 def test_query_params(rf):
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Request, my_query: Query[MyQueryData]) -> MyResponse:
         foo = my_query.q
         bar = len(foo)
@@ -98,7 +94,7 @@ def test_query_params(rf):
 
 
 def test_extra_query_params(rf):
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Request, my_query: Query[MyQueryData]) -> None:
         assert not hasattr(my_query, "r")
         return
@@ -113,7 +109,7 @@ def test_default_query_params(rf):
     class MyDefaultQueryData:
         q: Optional[str] = "foo"
 
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Request, my_query: Query[MyDefaultQueryData]) -> None:
         return
 
@@ -127,7 +123,7 @@ def test_default_response_key(rf):
     class MyDefaultResponse:
         r: Optional[str] = None
 
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Request) -> MyDefaultResponse:
         return MyDefaultResponse()
 
@@ -145,17 +141,14 @@ def test_raise_type_error_if_optional_not_provided():
         pass  # pragma: no cover
 
     with pytest.raises(CollectionError) as exc_info:
-        api_view(methods=["GET"], permissions=[])(view)
+        api_view(methods=["GET"])(view)
 
     assert "Optional fields must provide a default" in str(exc_info.value)
     assert "OptionalWithoutDefault'>.q`." in str(exc_info.value)
 
 
 def test_post_data(rf):
-    @api_view(
-        methods=["POST"],
-        permissions=[],
-    )
+    @api_view(methods=["POST"])
     def view(request: Request, my_data: Data[MyData]) -> MyResponse:
         foo = my_data.d
         bar = len(foo)
@@ -171,10 +164,7 @@ def test_urlencoded_request_data(rf):
     class MyData:
         foo: str
 
-    @api_view(
-        methods=["PUT"],
-        permissions=[],
-    )
+    @api_view(methods=["PUT"])
     def view(request: Request, my_query: Data[MyData]) -> None:
         assert my_query.foo == "bar"
 
@@ -196,10 +186,7 @@ def test_disallows_multiple_query_param_arguments():
 
     with pytest.raises(CollectionError) as exc_info:
 
-        @api_view(
-            methods=["GET"],
-            permissions=[],
-        )
+        @api_view(methods=["GET"])
         def view(request: Request, d1: Query[D1], d2: Query[D2]) -> None:
             pass  # pragma: no cover
 
@@ -219,11 +206,11 @@ def test_stacking(rf):
     class MyResponse:
         r: str
 
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view_single(request: Request, my_data: Query[MyQueryData]) -> MyResponse:
         pass  # pragma: no cover
 
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view_get(request: Request, my_data: Query[MyQueryData]) -> MyResponse:
         return MyResponse(r="get")
 
@@ -272,7 +259,7 @@ def test_nested_serializer(rf):
 
     my_query_value = None
 
-    @api_view(methods=["POST"], permissions=[])
+    @api_view(methods=["POST"])
     def view(request: Request, my_query: Data[Parent]) -> None:
         nonlocal my_query_value
         my_query_value = my_query
@@ -289,7 +276,7 @@ def test_non_marker_annotation(rf):
     class Data:
         q: str
 
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Annotated[Request, ""], my_query: Query[Data]) -> None:
         pass
 
@@ -301,7 +288,7 @@ def test_non_marker_annotation(rf):
 def test_missing_return_annotation(rf):
     with pytest.raises(CollectionError) as exc_info:
 
-        @api_view(methods=["GET"], permissions=[])
+        @api_view(methods=["GET"])
         def view(request: Request):
             pass  # pragma: no cover
 
@@ -309,7 +296,7 @@ def test_missing_return_annotation(rf):
 
 
 def test_url_path_params(client):
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view(request: Request, param: str) -> None:
         pass
 
@@ -341,10 +328,7 @@ class Other:
     ],
 )
 def test_invalid_return_value(rf, return_annotation, return_value, expected):
-    @api_view(
-        methods=["GET"],
-        permissions=[],
-    )
+    @api_view(methods=["GET"])
     def view(request: Request) -> return_annotation:
         return return_value
 
@@ -367,13 +351,13 @@ def test_invalid_return_value(rf, return_annotation, return_value, expected):
 def test_duplicate_methods():
     with pytest.raises(OverlappingMethods):
 
-        @api_view(methods=["GET", "GET"], permissions=[])
+        @api_view(methods=["GET", "GET"])
         def view2(request: Request) -> None:
             pass  # pragma: no cover
 
 
 def test_stacking_overlapping_methods():
-    @api_view(methods=["GET"], permissions=[])
+    @api_view(methods=["GET"])
     def view1(request: Request) -> None:
         pass  # pragma: no cover
 
@@ -387,7 +371,7 @@ def test_stacking_overlapping_methods():
 def test_non_dataclass_param():
     with pytest.raises(CollectionError) as exc_info:
 
-        @api_view(methods=["GET"], permissions=[])
+        @api_view(methods=["GET"])
         def view(request: Request, string: Data[str]) -> None:
             pass  # pragma: no cover
 
@@ -410,8 +394,50 @@ def test_name_already_used():
 
     with pytest.raises(CollectionError) as exc_info:
 
-        @api_view(methods=["GET"], permissions=[])
+        @api_view(methods=["GET"])
         def view(request: Request, c1: Data[copy1]) -> copy2:
             pass  # pragma: no cover
 
     assert "Name already in use" in str(exc_info.value)
+
+
+def test_permissions_decorator_on_absorbed_view():
+    @api_view(methods=["GET"])
+    def main_view(request: Request) -> None:
+        pass  # pragma: no cover
+
+    with pytest.raises(CollectionError) as exc_info:
+
+        @main_view.add(methods=["POST"])
+        @permission_classes([])
+        def added_view(request: Request) -> None:
+            pass  # pragma: no cover
+
+    assert "`@permission_classes` are shared with the parent view" in str(
+        exc_info.value
+    )
+
+
+def test_permissions_decorator_on_main_view(client):
+    class TestPermission(permissions.BasePermission):
+        def has_permission(self, request, view):
+            return False
+
+    @api_view(methods=["GET"])
+    @permission_classes([TestPermission])
+    def main_view(request: Request) -> None:
+        pass  # pragma: no cover
+
+    @main_view.add(methods=["POST"])
+    def added_view(request: Request) -> None:
+        pass  # pragma: no cover
+
+    urlpatterns = [
+        path("view/", main_view),
+    ]
+
+    with root_urlconf(urlpatterns):
+        response_get = client.get("/view/")
+        response_post = client.post("/view/")
+    assert response_get.status_code == 403
+    assert response_post.status_code == 403
