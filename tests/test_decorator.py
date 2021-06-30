@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from typing_extensions import Annotated
 
 from speccify.decorator import Data, Query, api_view
+from speccify.exceptions import CollectionError, InvalidReturnValue, OverlappingMethods
 from tests.helpers import get_schema, root_urlconf
 
 
@@ -143,7 +144,7 @@ def test_raise_type_error_if_optional_not_provided():
     def view(request: Request, my_query: Query[OptionalWithoutDefault]) -> None:
         pass  # pragma: no cover
 
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(CollectionError) as exc_info:
         api_view(methods=["GET"], permissions=[])(view)
 
     assert "Optional fields must provide a default" in str(exc_info.value)
@@ -193,7 +194,7 @@ def test_disallows_multiple_query_param_arguments():
     class D2:
         bar: str
 
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(CollectionError) as exc_info:
 
         @api_view(
             methods=["GET"],
@@ -298,7 +299,7 @@ def test_non_marker_annotation(rf):
 
 
 def test_missing_return_annotation(rf):
-    with pytest.raises(TypeError) as exc_info:
+    with pytest.raises(CollectionError) as exc_info:
 
         @api_view(methods=["GET"], permissions=[])
         def view(request: Request):
@@ -321,48 +322,96 @@ def test_url_path_params(client):
     assert response.status_code == 200
 
 
-def test_invalid_return_value(rf):
-    @dataclass
-    class Return:
-        field: str
+@dataclass
+class Return:
+    field: str
 
-    @dataclass
-    class Other:
-        other_field: int
 
+@dataclass
+class Other:
+    other_field: int
+
+
+@pytest.mark.parametrize(
+    "return_annotation, return_value, expected",
+    [
+        (Return, None, "response must be a dataclass"),
+        (Return, Other(other_field=0), "Invalid data returned from view"),
+        (None, Return(field="value"), "view returned data"),
+    ],
+)
+def test_invalid_return_value(rf, return_annotation, return_value, expected):
     @api_view(
         methods=["GET"],
         permissions=[],
     )
-    def view1(request: Request) -> Return:
-        return None
-
-    @api_view(
-        methods=["GET"],
-        permissions=[],
-    )
-    def view2(request: Request) -> Return:
-        return Other(other_field=0)
+    def view(request: Request) -> return_annotation:
+        return return_value
 
     request = rf.get("/?name=value")
-    with pytest.raises(AssertionError) as exc_info:
-        view1(request)
-    assert "response must be a dataclass" in str(exc_info.value)
-
-    with pytest.raises(TypeError) as exc_info:
-        view2(request)
-    assert "Invalid data returned from view" in str(exc_info.value)
+    with pytest.raises(InvalidReturnValue) as exc_info:
+        view(request)
+    assert expected in str(exc_info.value)
 
     urlpatterns = [
-        path("view1/", view1),
-        path("view2/", view2),
+        path("view/", view),
     ]
 
     client = Client(raise_request_exception=False)
 
     with root_urlconf(urlpatterns):
-        response = client.get("/view1/")
+        response = client.get("/view/")
         assert response.status_code == 500
 
-        response = client.get("/view2/")
-        assert response.status_code == 500
+
+def test_duplicate_methods():
+    with pytest.raises(OverlappingMethods):
+
+        @api_view(methods=["GET", "GET"], permissions=[])
+        def view2(request: Request) -> None:
+            pass  # pragma: no cover
+
+
+def test_stacking_overlapping_methods():
+    @api_view(methods=["GET"], permissions=[])
+    def view1(request: Request) -> None:
+        pass  # pragma: no cover
+
+    with pytest.raises(OverlappingMethods):
+
+        @view1.add(methods=["GET"])
+        def view2(request: Request) -> None:
+            pass  # pragma: no cover
+
+
+def test_non_dataclass_param():
+    with pytest.raises(CollectionError) as exc_info:
+
+        @api_view(methods=["GET"], permissions=[])
+        def view(request: Request, string: Data[str]) -> None:
+            pass  # pragma: no cover
+
+    assert str(exc_info.value) == "`<class 'str'>` must be a dataclass"
+
+
+def test_name_already_used():
+    @dataclass
+    class Dupe:
+        field: str
+
+    copy1 = Dupe
+
+    @dataclass
+    class Dupe:
+        field: str
+
+    # different from copy1, but same class name
+    copy2 = Dupe
+
+    with pytest.raises(CollectionError) as exc_info:
+
+        @api_view(methods=["GET"], permissions=[])
+        def view(request: Request, c1: Data[copy1]) -> copy2:
+            pass  # pragma: no cover
+
+    assert "Name already in use" in str(exc_info.value)

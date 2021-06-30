@@ -13,12 +13,12 @@ class MyInfo:
 
 @api_view(methods=["GET"], permissions=[])
 def view_get(request: Request, query: Query[MyInfo]) -> None:
-    pass
+    pass  # pragma: no cover
 
 
 @view_get.add(methods=["POST"])
 def view_post(request: Request, data: Data[MyInfo]) -> None:
-    pass
+    pass  # pragma: no cover
 
 
 path("path", view_get)

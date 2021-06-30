@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from typing_extensions import Annotated
 
+from .exceptions import CollectionError, InvalidReturnValue, OverlappingMethods
 from .typing import ApiView, DecoratorFactory, View, attach_add
 
 serializer_registry = {}
@@ -90,20 +91,20 @@ def _make_serializer(data_class):
     if data_class not in serializer_registry:
         name_used_by = registered_class_names.get(data_class.__name__)
         if name_used_by:
-            raise TypeError(
+            raise CollectionError(
                 f"Error collecting `{data_class}`. Name already in use by `{name_used_by}`"
             )
         try:
             fields = dataclasses.fields(data_class)
         except TypeError as exc:
-            raise TypeError(f"`{data_class}` must be a dataclass") from exc
+            raise CollectionError(f"`{data_class}` must be a dataclass") from exc
 
         for field in fields:
             if _is_optional(field.type) and (
                 field.default is dataclasses.MISSING
                 and field.default_factory is dataclasses.MISSING
             ):
-                raise TypeError(
+                raise CollectionError(
                     f"Error collecting `{data_class}.{field.name}`. Optional fields must provide a default"
                 )
 
@@ -162,13 +163,13 @@ class ViewDescriptor:
                 continue
 
             if marker in seen_types:
-                raise TypeError(f"At most one `{marker}` parameter is allowed")
+                raise CollectionError(f"At most one `{marker}` parameter is allowed")
             serializer = _make_serializer(data_class)
             injected_params[name] = (marker, serializer)
             seen_types.add(marker)
 
         if "return" not in parameters:
-            raise TypeError("Response type annotation is required")
+            raise CollectionError("Response type annotation is required")
         response_cls = parameters["return"]
         if response_cls is NoneType:
             response_cls = Empty
@@ -247,7 +248,8 @@ def api_view(
 
         method_map = {}
         for method in methods:
-            assert method not in method_map, "overlapping methods are not allowed"
+            if method in method_map:
+                raise OverlappingMethods()
             method_map[method] = view_descriptor
 
         @functools.wraps(view_func)
@@ -278,22 +280,23 @@ def api_view(
             response_data = view_descriptor.view_func(request, **view_kwargs)
 
             if view_descriptor.response_serializer_cls.Meta.dataclass is Empty:
-                assert (
-                    response_data is None
-                ), "Type signature says response is None, but view returned data"
+                if response_data is not None:
+                    raise InvalidReturnValue(
+                        "Type signature says response is None, but view returned data"
+                    )
                 response_data = Empty()
             else:
-                assert dataclasses.is_dataclass(
-                    response_data
-                ), f"response must be a dataclass, got {response_data}"
+                if not dataclasses.is_dataclass(response_data):
+                    raise InvalidReturnValue(
+                        f"response must be a dataclass, got {response_data}"
+                    )
 
             response_serializer = view_descriptor.response_serializer_cls(
                 data=dataclasses.asdict(response_data)
             )
             if not response_serializer.is_valid():
-                raise TypeError(
-                    f"Invalid data returned from view: {response_serializer.errors}"
-                )
+                errors = response_serializer.errors
+                raise InvalidReturnValue(f"Invalid data returned from view: {errors}")
 
             return Response(
                 status=200, data=dataclasses.asdict(response_serializer.validated_data)
@@ -307,9 +310,8 @@ def api_view(
             def decorator_wrapper(view_func: Callable[..., Any]) -> AbsorbedView:
                 view_descriptor = ViewDescriptor.from_view(view_func)
                 for method in methods:
-                    assert (
-                        method not in method_map
-                    ), "overlapping methods are not allowed"
+                    if method in method_map:
+                        raise OverlappingMethods()
                     method_map[method] = view_descriptor
                 add_methods(wrapper, methods)
                 extend_schema_decorator = extend_schema(
