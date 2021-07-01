@@ -11,7 +11,7 @@ class MyInfo:
     val: str
 
 
-@api_view(methods=["GET"], permissions=[])
+@api_view(methods=["GET"])
 def view_get(request: Request, query: Query[MyInfo]) -> None:
     pass  # pragma: no cover
 

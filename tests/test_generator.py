@@ -7,10 +7,7 @@ from tests.helpers import get_schema
 
 
 def test_basic(rf):
-    @api_view(
-        methods=["GET"],
-        permissions=[],
-    )
+    @api_view(methods=["GET"])
     def speccify_view(request: Request) -> None:
         pass  # pragma: no cover
 

@@ -14,7 +14,7 @@ easy-to-use apis and openapi schemas.
     class MyResponse:
         length: int
 
-    @speccify.api_view(methods=["GET"], permissions=[])
+    @speccify.api_view(methods=["GET"])
     def my_view(request: Request, my_query: Query[MyQueryData]) -> MyResponse:
         name = my_query.name
         length = len(name)
